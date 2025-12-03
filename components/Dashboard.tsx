@@ -277,7 +277,11 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, units }) => {
               
               <div className="flex-grow min-h-[320px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <BarChart 
+                    data={monthlyData} 
+                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }} 
+                    barCategoryGap="20%"
+                  >
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} opacity={0.5} />
                     <XAxis 
                         dataKey="name" 
@@ -292,13 +296,13 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, units }) => {
                       fontSize={10} 
                       tickLine={false} 
                       axisLine={false} 
-                      width={85} 
+                      width={90} 
                       tickFormatter={axisFormatter} 
                       dx={-10}
                     />
                     <ReTooltip content={<CustomMonthlyTooltip />} cursor={{ fill: '#1f2937', opacity: 0.4 }} />
-                    <Bar dataKey="income" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                    <Bar dataKey="expense" fill="#EF4444" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                    <Bar dataKey="income" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                    <Bar dataKey="expense" fill="#EF4444" radius={[4, 4, 0, 0]} maxBarSize={50} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
