@@ -1,27 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { Transaction, TransactionType, PaymentStatus } from './types';
+import { Transaction, TransactionType, PaymentStatus, User } from './types';
+import { db } from './services/db';
+import { auth } from './services/auth';
 import TransactionForm from './components/TransactionForm';
 import Dashboard from './components/Dashboard';
 import TransactionTable from './components/TransactionTable';
 import SummaryCard from './components/SummaryCard';
 import ConfirmModal from './components/ConfirmModal';
+import Login from './components/Login';
+import UserManagement from './components/UserManagement';
 import { formatCurrency } from './utils';
-import { LayoutDashboard, Wallet, Receipt, TrendingUp, TrendingDown, DollarSign, Building2 } from 'lucide-react';
-import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, UNITS as DEFAULT_UNITS } from './constants';
+import { LayoutDashboard, Wallet, Receipt, TrendingUp, TrendingDown, DollarSign, Building2, LogOut, Shield, User as UserIcon } from 'lucide-react';
+import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from './constants';
 
 // Tabs Enum
 enum ActiveTab {
   INPUT = 'INPUT',
   DASHBOARD = 'DASHBOARD',
   MANAGEMENT = 'MANAGEMENT',
+  USERS = 'USERS', // Admin Only
 }
 
 const App: React.FC = () => {
+  // Auth State
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  // App State
   const [activeTab, setActiveTab] = useState<ActiveTab>(ActiveTab.INPUT);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // Categories State
+  
+  // Data State
   const [categories, setCategories] = useState<{income: string[], expense: string[]}>(() => {
     const savedCats = localStorage.getItem('finance_categories');
     return savedCats ? JSON.parse(savedCats) : {
@@ -30,12 +39,8 @@ const App: React.FC = () => {
     };
   });
 
-  // Units State
-  const [units, setUnits] = useState<string[]>(() => {
-    const savedUnits = localStorage.getItem('finance_units');
-    return savedUnits ? JSON.parse(savedUnits) : DEFAULT_UNITS;
-  });
-
+  const [units, setUnits] = useState<string[]>([]);
+  
   // Global Unit Filter State
   const [selectedUnit, setSelectedUnit] = useState<string>('ALL');
 
@@ -52,59 +57,57 @@ const App: React.FC = () => {
     onConfirm: () => {},
   });
 
-  // Load Transactions from LocalStorage
+  // --- INITIALIZATION ---
   useEffect(() => {
-    const saved = localStorage.getItem('finance_transactions');
-    if (saved) {
-      try {
-        setTransactions(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to parse transactions", e);
-      }
-    }
-    setLoading(false);
+    const user = auth.getCurrentUser();
+    setCurrentUser(user);
+    setAuthChecked(true);
+    
+    // Load initial data from DB service
+    setTransactions(db.getTransactions());
+    setUnits(db.getUnits());
   }, []);
 
-  // Save Transactions to LocalStorage
+  // Sync state changes back to DB
   useEffect(() => {
-    if (!loading) {
-      localStorage.setItem('finance_transactions', JSON.stringify(transactions));
+    if (authChecked) {
+      db.saveTransactions(transactions);
     }
-  }, [transactions, loading]);
+  }, [transactions, authChecked]);
 
-  // Save Categories to LocalStorage
+  useEffect(() => {
+    if (authChecked) {
+      db.saveUnits(units);
+    }
+  }, [units, authChecked]);
+  
+  // Save Categories to LocalStorage (Legacy handling, could move to DB too)
   useEffect(() => {
     localStorage.setItem('finance_categories', JSON.stringify(categories));
   }, [categories]);
 
-  // Save Units to LocalStorage
-  useEffect(() => {
-    localStorage.setItem('finance_units', JSON.stringify(units));
-  }, [units]);
 
-  // --- Confirm Modal Helpers ---
-  const openConfirm = (title: string, message: string, action: () => void) => {
-    setConfirmModal({
-      isOpen: true,
-      title,
-      message,
-      onConfirm: action,
-    });
+  // --- HANDLERS ---
+
+  const handleLoginSuccess = () => {
+    setCurrentUser(auth.getCurrentUser());
+    setTransactions(db.getTransactions());
+    setUnits(db.getUnits());
   };
 
-  const closeConfirm = () => {
-    setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+  const handleLogout = () => {
+    auth.logout();
+    setCurrentUser(null);
   };
-
-  const handleConfirmAction = () => {
-    confirmModal.onConfirm();
-    closeConfirm();
-  };
-
-  // --- Transaction Management ---
 
   const handleAddTransactions = (newTxs: Transaction[]) => {
-    setTransactions((prev) => [...prev, ...newTxs]);
+    // Inject current user ID into transaction
+    const txsWithUser = newTxs.map(t => ({
+      ...t,
+      userId: currentUser?.id,
+      createdAt: new Date().toISOString()
+    }));
+    setTransactions((prev) => [...prev, ...txsWithUser]);
   };
 
   const handleDeleteTransaction = (id: string) => {
@@ -122,7 +125,7 @@ const App: React.FC = () => {
     setTransactions((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
   };
 
-  // --- Category Management ---
+  // --- Categories & Units ---
 
   const handleAddCategory = (type: TransactionType, name: string) => {
     setCategories(prev => ({
@@ -135,14 +138,11 @@ const App: React.FC = () => {
   };
 
   const handleRenameCategory = (type: TransactionType, oldName: string, newName: string) => {
-    // 1. Update List
     setCategories(prev => {
       const listKey = type === TransactionType.INCOME ? 'income' : 'expense';
       const newList = prev[listKey].map(c => c === oldName ? newName : c);
       return { ...prev, [listKey]: newList };
     });
-
-    // 2. Update all existing transactions with this category
     setTransactions(prev => prev.map(t => {
       if (t.type === type && t.category === oldName) {
         return { ...t, category: newName };
@@ -154,7 +154,7 @@ const App: React.FC = () => {
   const handleDeleteCategory = (type: TransactionType, name: string) => {
     openConfirm(
       'Excluir Categoria',
-      `Deseja remover a categoria "${name}"? Lançamentos existentes com essa categoria NÃO serão excluídos.`,
+      `Deseja remover a categoria "${name}"? Lançamentos existentes NÃO serão excluídos.`,
       () => {
         setCategories(prev => {
           const listKey = type === TransactionType.INCOME ? 'income' : 'expense';
@@ -164,8 +164,6 @@ const App: React.FC = () => {
     );
   };
 
-  // --- Unit Management ---
-
   const handleAddUnit = (name: string) => {
     if (!units.includes(name)) {
       setUnits(prev => [...prev, name]);
@@ -173,14 +171,9 @@ const App: React.FC = () => {
   };
 
   const handleRenameUnit = (oldName: string, newName: string) => {
-    // 1. Update List
     setUnits(prev => prev.map(u => u === oldName ? newName : u));
-
-    // 2. Update all existing transactions with this unit
     setTransactions(prev => prev.map(t => {
-      if (t.unit === oldName) {
-        return { ...t, unit: newName };
-      }
+      if (t.unit === oldName) return { ...t, unit: newName };
       return t;
     }));
   };
@@ -188,46 +181,58 @@ const App: React.FC = () => {
   const handleDeleteUnit = (name: string) => {
     openConfirm(
       'Excluir Unidade',
-      `Deseja remover a unidade "${name}"? Lançamentos existentes desta unidade NÃO serão excluídos.`,
+      `Deseja remover a unidade "${name}"?`,
       () => {
         setUnits(prev => prev.filter(u => u !== name));
       }
     );
   };
 
+  const openConfirm = (title: string, message: string, action: () => void) => {
+    setConfirmModal({ isOpen: true, title, message, onConfirm: action });
+  };
+  
+  const closeConfirm = () => setConfirmModal(prev => ({ ...prev, isOpen: false }));
+  const handleConfirmAction = () => { confirmModal.onConfirm(); closeConfirm(); };
 
-  // Filter Logic (For Table and Quick Summary)
+  // --- RENDERING HELPERS ---
+
+  // Filter Units based on User Permissions
+  const availableUnits = currentUser?.role === 'ADMIN' 
+    ? units 
+    : units.filter(u => currentUser?.allowedUnits?.includes(u));
+
+  // Filter Transactions based on Unit selection AND User Permissions
   const filteredTransactions = transactions.filter(t => {
+    // 1. Check Permission
+    if (!auth.canAccessUnit(currentUser!, t.unit || '')) return false;
+    // 2. Check Selection
     if (selectedUnit === 'ALL') return true;
     return t.unit === selectedUnit;
   });
 
-  // Quick Stats for Header (Based on Filtered Transactions)
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
-  
   const currentMonthTxs = filteredTransactions.filter(t => {
     const d = new Date(t.date + 'T12:00:00');
     return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
   });
 
-  const monthIncome = currentMonthTxs
-    .filter(t => t.type === TransactionType.INCOME)
-    .reduce((sum, t) => sum + t.amount, 0);
+  const monthIncome = currentMonthTxs.filter(t => t.type === TransactionType.INCOME).reduce((s, t) => s + t.amount, 0);
+  const monthExpense = currentMonthTxs.filter(t => t.type === TransactionType.EXPENSE).reduce((s, t) => s + t.amount, 0);
+  const pendingExpense = currentMonthTxs.filter(t => t.type === TransactionType.EXPENSE && t.status === PaymentStatus.PENDING).reduce((s, t) => s + t.amount, 0);
 
-  const monthExpense = currentMonthTxs
-    .filter(t => t.type === TransactionType.EXPENSE)
-    .reduce((sum, t) => sum + t.amount, 0);
+  // --- RENDER ---
 
-  const pendingExpense = currentMonthTxs
-    .filter(t => t.type === TransactionType.EXPENSE && t.status === PaymentStatus.PENDING)
-    .reduce((sum, t) => sum + t.amount, 0);
+  if (!authChecked) return null;
 
-  if (loading) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Carregando...</div>;
+  if (!currentUser) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 font-sans pb-12 relative">
-      {/* Top Navigation / Header */}
+      {/* HEADER */}
       <header className="bg-gray-950 border-b border-gray-800 shadow-xl sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -239,12 +244,15 @@ const App: React.FC = () => {
                 <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-teal-300">
                   FinanceMaster Pro
                 </h1>
-                <p className="text-xs text-gray-500 uppercase tracking-widest">Controle Financeiro</p>
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <UserIcon size={10} />
+                  <span className="uppercase tracking-widest">{currentUser.name} ({currentUser.role})</span>
+                </div>
               </div>
             </div>
 
             <div className="flex items-center gap-4 w-full md:w-auto overflow-x-auto">
-              {/* Global Unit Filter (Affects Cards & Table) */}
+              {/* Unit Selector */}
               <div className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5">
                   <Building2 size={16} className="text-gray-400" />
                   <select 
@@ -253,13 +261,13 @@ const App: React.FC = () => {
                     className="bg-transparent text-sm text-white focus:outline-none min-w-[120px]"
                   >
                     <option value="ALL">Todas as Unidades</option>
-                    {units.map(u => (
+                    {availableUnits.map(u => (
                       <option key={u} value={u}>{u}</option>
                     ))}
                   </select>
               </div>
 
-              {/* Navigation Tabs */}
+              {/* Navigation */}
               <nav className="flex bg-gray-800 rounded-lg p-1">
                 <TabButton 
                   active={activeTab === ActiveTab.INPUT} 
@@ -279,18 +287,33 @@ const App: React.FC = () => {
                   icon={<TrendingUp size={18} />}
                   label="Fluxo de Caixa"
                 />
+                {currentUser.role === 'ADMIN' && (
+                  <TabButton 
+                    active={activeTab === ActiveTab.USERS} 
+                    onClick={() => setActiveTab(ActiveTab.USERS)}
+                    icon={<Shield size={18} />}
+                    label="Usuários"
+                  />
+                )}
               </nav>
+
+              <button 
+                onClick={handleLogout}
+                className="p-2 text-red-400 hover:bg-red-900/20 rounded-lg transition-colors"
+                title="Sair"
+              >
+                <LogOut size={20} />
+              </button>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Main Content Container */}
+      {/* MAIN CONTENT */}
       <main className="container mx-auto px-4 py-8 flex flex-col gap-8">
         
-        {/* Quick Month Summary (Dados) */}
-        {/* Layout: Always display summary cards on top */}
-        {activeTab !== ActiveTab.DASHBOARD && (
+        {/* TOP CARDS (Summary) - Always visible except on Dashboard */}
+        {activeTab !== ActiveTab.DASHBOARD && activeTab !== ActiveTab.USERS && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <SummaryCard 
               title="Recebido (Mês Atual)" 
@@ -319,9 +342,9 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Tab Content */}
-        {/* Layout: Always below the summary cards */}
+        {/* TABS CONTENT */}
         <div className="transition-opacity duration-300">
+          
           {activeTab === ActiveTab.INPUT && (
             <div className="space-y-6 animate-fade-in-up">
               <TransactionForm 
@@ -331,11 +354,11 @@ const App: React.FC = () => {
                 onAddCategory={handleAddCategory}
                 onRenameCategory={handleRenameCategory}
                 onDeleteCategory={handleDeleteCategory}
-                units={units}
+                units={availableUnits}
                 onAddUnit={handleAddUnit}
                 onRenameUnit={handleRenameUnit}
                 onDeleteUnit={handleDeleteUnit}
-                defaultUnit={selectedUnit !== 'ALL' ? selectedUnit : units[0]}
+                defaultUnit={selectedUnit !== 'ALL' ? selectedUnit : availableUnits[0]}
               />
               <div className="text-center text-gray-500 mt-8 hidden md:block">
                 <p>Cadastre suas entradas e saídas acima. Utilize a aba "Gerenciamento" para editar erros.</p>
@@ -349,21 +372,29 @@ const App: React.FC = () => {
                   transactions={filteredTransactions} 
                   onDelete={handleDeleteTransaction}
                   onUpdate={handleUpdateTransaction}
-                  units={units}
+                  units={availableUnits}
                />
             </div>
           )}
 
           {activeTab === ActiveTab.DASHBOARD && (
             <div className="animate-fade-in-up">
-              {/* Pass ALL transactions to Dashboard so it can handle its own advanced filtering */}
-              <Dashboard transactions={transactions} units={units} />
+              {/* Dashboard receives all transactions but filters internally based on permission logic inside dashboard if needed, 
+                  but here we pass the filtered list by user permission to be safe */}
+              <Dashboard 
+                transactions={transactions.filter(t => auth.canAccessUnit(currentUser, t.unit || ''))} 
+                units={availableUnits} 
+              />
             </div>
           )}
+
+          {activeTab === ActiveTab.USERS && currentUser.role === 'ADMIN' && (
+            <UserManagement availableUnits={units} />
+          )}
+
         </div>
       </main>
       
-      {/* Global Confirmation Modal */}
       <ConfirmModal 
         isOpen={confirmModal.isOpen}
         title={confirmModal.title}
@@ -375,7 +406,7 @@ const App: React.FC = () => {
   );
 };
 
-// Helper Sub-component for Tabs
+// Helper for Tab Button
 const TabButton: React.FC<{ active: boolean; onClick: () => void; icon: React.ReactNode; label: string }> = ({ active, onClick, icon, label }) => (
   <button
     type="button"

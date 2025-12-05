@@ -21,6 +21,8 @@ export interface Transaction {
     total: number;
   };
   unit?: string; // e.g., "Loja Osasco"
+  userId?: string; // ID of the user who created it
+  createdAt?: string;
 }
 
 export interface CategoryStats {
@@ -35,4 +37,19 @@ export interface MonthlySummary {
   income: number;
   expense: number;
   balance: number;
+}
+
+// --- Auth Types ---
+
+export type UserRole = 'ADMIN' | 'MANAGER' | 'COLLABORATOR';
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  allowedUnits: string[]; // List of unit names this user can access
+  passwordHash?: string; // In a real app, never store plain text. Here we simulate.
+  createdAt: string;
+  active: boolean;
 }
