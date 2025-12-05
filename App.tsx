@@ -289,10 +289,9 @@ const App: React.FC = () => {
       <main className="container mx-auto px-4 py-8 flex flex-col gap-8">
         
         {/* Quick Month Summary (Dados) */}
-        {/* Order-2 on mobile (bottom), Order-1 on desktop (top) */}
-        {/* HIDE this section if we are on Dashboard Tab to avoid clutter */}
+        {/* Layout: Always display summary cards on top */}
         {activeTab !== ActiveTab.DASHBOARD && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 order-2 md:order-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <SummaryCard 
               title="Recebido (Mês Atual)" 
               value={formatCurrency(monthIncome)} 
@@ -321,8 +320,8 @@ const App: React.FC = () => {
         )}
 
         {/* Tab Content */}
-        {/* Order-1 on mobile (top), Order-2 on desktop (bottom) */}
-        <div className="transition-opacity duration-300 order-1 md:order-2">
+        {/* Layout: Always below the summary cards */}
+        <div className="transition-opacity duration-300">
           {activeTab === ActiveTab.INPUT && (
             <div className="space-y-6 animate-fade-in-up">
               <TransactionForm 
