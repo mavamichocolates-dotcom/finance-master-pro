@@ -4,14 +4,14 @@ import { db } from './db';
 const KEY_SESSION = 'auth_session';
 
 class AuthService {
-  login(email: string, password: string): User | null {
-    const user = db.findUserByEmail(email);
+  async login(email: string, password: string): Promise<User | null> {
+    const user = await db.findUserByEmail(email);
     
-    // Simple password check simulation
-    // In production, use bcryptjs to compare hashes
+    // In a real production app, use Supabase Auth or bcrypt here.
+    // For this custom implementation requested:
     if (user && user.active && user.passwordHash === password) {
       const sessionUser = { ...user };
-      delete sessionUser.passwordHash; // Don't store pass in session
+      delete sessionUser.passwordHash; 
       localStorage.setItem(KEY_SESSION, JSON.stringify(sessionUser));
       return sessionUser;
     }

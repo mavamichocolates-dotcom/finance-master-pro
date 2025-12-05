@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
 import { db } from '../services/db';
-import { generateId } from '../utils';
-import { Trash2, Edit2, UserPlus, Shield, Store, Save, X } from 'lucide-react';
+import { Trash2, Edit2, UserPlus, Shield, Store, Save, X, Loader2 } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 
 interface UserManagementProps {
@@ -11,6 +10,7 @@ interface UserManagementProps {
 
 const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
   const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<Partial<User>>({});
   
@@ -23,13 +23,16 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
     loadUsers();
   }, []);
 
-  const loadUsers = () => {
-    setUsers(db.getUsers());
+  const loadUsers = async () => {
+    setLoading(true);
+    const data = await db.getUsers();
+    setUsers(data);
+    setLoading(false);
   };
 
   const handleEdit = (user?: User) => {
     if (user) {
-      setEditingUser({ ...user, passwordHash: '' }); // Don't show hash, empty means no change
+      setEditingUser({ ...user, passwordHash: '' }); // Don't show hash
     } else {
       setEditingUser({
         name: '',
@@ -44,46 +47,53 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
   };
 
   const handleDelete = (id: string) => {
-    if (id === 'admin-001') {
-      alert('Não é possível excluir o administrador principal.');
+    // Basic check for admin safety
+    const user = users.find(u => u.id === id);
+    if (user && user.role === 'ADMIN' && users.filter(u => u.role === 'ADMIN').length <= 1) {
+      alert('Não é possível excluir o único administrador.');
       return;
     }
     
     setConfirmConfig({
       isOpen: true,
-      action: () => {
-        db.deleteUser(id);
-        loadUsers();
+      action: async () => {
+        setLoading(true);
+        await db.deleteUser(id);
+        await loadUsers();
       }
     });
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser.name || !editingUser.email) return;
 
-    // Validation for new user password
     if (!editingUser.id && !editingUser.passwordHash) {
       alert('Senha é obrigatória para novos usuários.');
       return;
     }
 
-    const userData: User = {
-      id: editingUser.id || generateId(),
-      name: editingUser.name,
-      email: editingUser.email,
-      role: editingUser.role as UserRole || 'COLLABORATOR',
-      allowedUnits: editingUser.allowedUnits || [],
-      active: editingUser.active ?? true,
-      createdAt: editingUser.createdAt || new Date().toISOString(),
-      // Handle password update
-      passwordHash: editingUser.passwordHash ? editingUser.passwordHash : 
-                   (editingUser.id ? users.find(u => u.id === editingUser.id)?.passwordHash : '')
-    } as User;
+    setLoading(true);
+    try {
+      const userData: User = {
+        id: editingUser.id || '', // DB will generate ID if empty usually, but we handle in db service
+        name: editingUser.name,
+        email: editingUser.email,
+        role: editingUser.role as UserRole || 'COLLABORATOR',
+        allowedUnits: editingUser.allowedUnits || [],
+        active: editingUser.active ?? true,
+        createdAt: editingUser.createdAt || new Date().toISOString(),
+        passwordHash: editingUser.passwordHash || '' // Logic handled in DB service to keep old pass if empty
+      } as User;
 
-    db.saveUser(userData);
-    setIsModalOpen(false);
-    loadUsers();
+      await db.saveUser(userData);
+      setIsModalOpen(false);
+      await loadUsers();
+    } catch (e) {
+      alert('Erro ao salvar usuário.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const toggleUnitPermission = (unit: string) => {
@@ -94,6 +104,10 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
       setEditingUser({ ...editingUser, allowedUnits: [...current, unit] });
     }
   };
+
+  if (loading && !isModalOpen && users.length === 0) {
+    return <div className="p-8 text-center text-gray-500"><Loader2 className="animate-spin inline mr-2"/> Carregando usuários...</div>;
+  }
 
   return (
     <div className="space-y-6 animate-fade-in-up">
@@ -168,15 +182,13 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
               >
                 <Edit2 size={18} />
               </button>
-              {user.id !== 'admin-001' && (
-                <button 
-                  onClick={() => handleDelete(user.id)}
-                  className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded-lg transition-colors"
-                  title="Excluir"
-                >
-                  <Trash2 size={18} />
-                </button>
-              )}
+              <button 
+                onClick={() => handleDelete(user.id)}
+                className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded-lg transition-colors"
+                title="Excluir"
+              >
+                <Trash2 size={18} />
+              </button>
             </div>
           </div>
         ))}
@@ -272,9 +284,11 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
                 </button>
                 <button
                   type="submit"
+                  disabled={loading}
                   className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-lg flex items-center gap-2"
                 >
-                  <Save size={18} /> Salvar Usuário
+                  {loading ? <Loader2 className="animate-spin" size={18}/> : <Save size={18} />} 
+                  Salvar Usuário
                 </button>
               </div>
             </form>

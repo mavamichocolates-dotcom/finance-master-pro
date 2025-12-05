@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, Mail, LayoutDashboard, ArrowRight } from 'lucide-react';
+import { Lock, Mail, LayoutDashboard, ArrowRight, Loader2 } from 'lucide-react';
 import { auth } from '../services/auth';
 
 interface LoginProps {
@@ -10,14 +10,24 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const user = auth.login(email, password);
-    if (user) {
-      onLoginSuccess();
-    } else {
-      setError('Credenciais inválidas ou usuário inativo.');
+    setLoading(true);
+    setError('');
+    
+    try {
+      const user = await auth.login(email, password);
+      if (user) {
+        onLoginSuccess();
+      } else {
+        setError('Credenciais inválidas ou erro de conexão.');
+      }
+    } catch (e) {
+      setError('Erro ao conectar ao servidor.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -81,19 +91,12 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
           <button
             type="submit"
-            className="w-full bg-gradient-to-r from-blue-600 to-teal-600 hover:from-blue-500 hover:to-teal-500 text-white font-bold py-3 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all transform hover:scale-[1.02]"
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-blue-600 to-teal-600 hover:from-blue-500 hover:to-teal-500 text-white font-bold py-3 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all transform hover:scale-[1.02] disabled:opacity-70 disabled:cursor-not-allowed"
           >
-            Acessar Sistema
-            <ArrowRight size={18} />
+            {loading ? <Loader2 className="animate-spin" size={20}/> : <><span className="mr-1">Acessar Sistema</span><ArrowRight size={18} /></>}
           </button>
         </form>
-
-        <div className="mt-8 text-center border-t border-gray-800 pt-6">
-          <p className="text-xs text-gray-600">
-            Acesso restrito a pessoal autorizado. <br/>
-            Credenciais padrão: <strong>admin</strong> / <strong>123</strong>
-          </p>
-        </div>
       </div>
     </div>
   );

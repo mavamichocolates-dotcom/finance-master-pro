@@ -10,7 +10,7 @@ import ConfirmModal from './components/ConfirmModal';
 import Login from './components/Login';
 import UserManagement from './components/UserManagement';
 import { formatCurrency } from './utils';
-import { LayoutDashboard, Wallet, Receipt, TrendingUp, TrendingDown, DollarSign, Building2, LogOut, Shield, User as UserIcon } from 'lucide-react';
+import { LayoutDashboard, Wallet, Receipt, TrendingUp, TrendingDown, DollarSign, Building2, LogOut, Shield, User as UserIcon, Loader2 } from 'lucide-react';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from './constants';
 
 // Tabs Enum
@@ -25,6 +25,7 @@ const App: React.FC = () => {
   // Auth State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   // App State
   const [activeTab, setActiveTab] = useState<ActiveTab>(ActiveTab.INPUT);
@@ -59,29 +60,32 @@ const App: React.FC = () => {
 
   // --- INITIALIZATION ---
   useEffect(() => {
-    const user = auth.getCurrentUser();
-    setCurrentUser(user);
-    setAuthChecked(true);
+    const initApp = async () => {
+      const user = auth.getCurrentUser();
+      setCurrentUser(user);
+      setAuthChecked(true);
+      
+      if (user) {
+        setIsLoading(true);
+        try {
+          const [txs, dbUnits] = await Promise.all([
+            db.getTransactions(),
+            db.getUnits()
+          ]);
+          setTransactions(txs);
+          setUnits(dbUnits);
+        } catch (error) {
+          console.error("Failed to load initial data", error);
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
     
-    // Load initial data from DB service
-    setTransactions(db.getTransactions());
-    setUnits(db.getUnits());
+    initApp();
   }, []);
 
-  // Sync state changes back to DB
-  useEffect(() => {
-    if (authChecked) {
-      db.saveTransactions(transactions);
-    }
-  }, [transactions, authChecked]);
-
-  useEffect(() => {
-    if (authChecked) {
-      db.saveUnits(units);
-    }
-  }, [units, authChecked]);
-  
-  // Save Categories to LocalStorage (Legacy handling, could move to DB too)
+  // Save Categories to LocalStorage (Legacy/Hybrid)
   useEffect(() => {
     localStorage.setItem('finance_categories', JSON.stringify(categories));
   }, [categories]);
@@ -89,25 +93,46 @@ const App: React.FC = () => {
 
   // --- HANDLERS ---
 
-  const handleLoginSuccess = () => {
-    setCurrentUser(auth.getCurrentUser());
-    setTransactions(db.getTransactions());
-    setUnits(db.getUnits());
+  const handleLoginSuccess = async () => {
+    const user = auth.getCurrentUser();
+    setCurrentUser(user);
+    
+    setIsLoading(true);
+    try {
+      const [txs, dbUnits] = await Promise.all([
+        db.getTransactions(),
+        db.getUnits()
+      ]);
+      setTransactions(txs);
+      setUnits(dbUnits);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleLogout = () => {
     auth.logout();
     setCurrentUser(null);
+    setTransactions([]);
   };
 
-  const handleAddTransactions = (newTxs: Transaction[]) => {
-    // Inject current user ID into transaction
-    const txsWithUser = newTxs.map(t => ({
-      ...t,
-      userId: currentUser?.id,
-      createdAt: new Date().toISOString()
-    }));
-    setTransactions((prev) => [...prev, ...txsWithUser]);
+  const handleAddTransactions = async (newTxs: Transaction[]) => {
+    setIsLoading(true);
+    try {
+      const savedTxs: Transaction[] = [];
+      for (const t of newTxs) {
+        const txWithUser = { ...t, userId: currentUser?.id };
+        const saved = await db.addTransaction(txWithUser);
+        if (saved) savedTxs.push(saved);
+      }
+      setTransactions((prev) => [...prev, ...savedTxs]);
+    } catch (error) {
+      alert("Erro ao salvar transação. Verifique a conexão.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleDeleteTransaction = (id: string) => {
@@ -116,13 +141,29 @@ const App: React.FC = () => {
       ? `Deseja excluir o lançamento "${t.description}" de ${formatCurrency(t.amount)}?`
       : 'Tem certeza que deseja excluir este lançamento?';
 
-    openConfirm('Excluir Lançamento', message, () => {
-      setTransactions((prev) => prev.filter((t) => t.id !== id));
+    openConfirm('Excluir Lançamento', message, async () => {
+      setIsLoading(true);
+      try {
+        await db.deleteTransaction(id);
+        setTransactions((prev) => prev.filter((t) => t.id !== id));
+      } catch (e) {
+        alert("Erro ao excluir.");
+      } finally {
+        setIsLoading(false);
+      }
     });
   };
 
-  const handleUpdateTransaction = (updated: Transaction) => {
-    setTransactions((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+  const handleUpdateTransaction = async (updated: Transaction) => {
+    setIsLoading(true);
+    try {
+      await db.updateTransaction(updated);
+      setTransactions((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+    } catch (e) {
+      alert("Erro ao atualizar.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // --- Categories & Units ---
@@ -143,6 +184,7 @@ const App: React.FC = () => {
       const newList = prev[listKey].map(c => c === oldName ? newName : c);
       return { ...prev, [listKey]: newList };
     });
+    // In a real app we might batch update DB, here we update local state representation
     setTransactions(prev => prev.map(t => {
       if (t.type === type && t.category === oldName) {
         return { ...t, category: newName };
@@ -164,26 +206,40 @@ const App: React.FC = () => {
     );
   };
 
-  const handleAddUnit = (name: string) => {
+  const handleAddUnit = async (name: string) => {
     if (!units.includes(name)) {
-      setUnits(prev => [...prev, name]);
+      setIsLoading(true);
+      try {
+        await db.addUnit(name);
+        setUnits(prev => [...prev, name]);
+      } catch (e) {
+        alert("Erro ao criar unidade.");
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
   const handleRenameUnit = (oldName: string, newName: string) => {
+    // DB rename not implemented in simple store table for now, would require ID based logic
+    // We update local state
     setUnits(prev => prev.map(u => u === oldName ? newName : u));
-    setTransactions(prev => prev.map(t => {
-      if (t.unit === oldName) return { ...t, unit: newName };
-      return t;
-    }));
   };
 
   const handleDeleteUnit = (name: string) => {
     openConfirm(
       'Excluir Unidade',
       `Deseja remover a unidade "${name}"?`,
-      () => {
-        setUnits(prev => prev.filter(u => u !== name));
+      async () => {
+        setIsLoading(true);
+        try {
+          await db.deleteUnit(name);
+          setUnits(prev => prev.filter(u => u !== name));
+        } catch (e) {
+          alert("Erro ao excluir unidade.");
+        } finally {
+          setIsLoading(false);
+        }
       }
     );
   };
@@ -232,6 +288,13 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 font-sans pb-12 relative">
+      {/* Loading Overlay */}
+      {isLoading && (
+        <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center backdrop-blur-sm">
+          <Loader2 className="animate-spin text-blue-500" size={48} />
+        </div>
+      )}
+
       {/* HEADER */}
       <header className="bg-gray-950 border-b border-gray-800 shadow-xl sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
@@ -379,8 +442,6 @@ const App: React.FC = () => {
 
           {activeTab === ActiveTab.DASHBOARD && (
             <div className="animate-fade-in-up">
-              {/* Dashboard receives all transactions but filters internally based on permission logic inside dashboard if needed, 
-                  but here we pass the filtered list by user permission to be safe */}
               <Dashboard 
                 transactions={transactions.filter(t => auth.canAccessUnit(currentUser, t.unit || ''))} 
                 units={availableUnits} 
