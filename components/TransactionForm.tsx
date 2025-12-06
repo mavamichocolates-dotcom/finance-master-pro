@@ -378,7 +378,7 @@ interface SimpleInputModalProps {
 }
 
 const SimpleInputModal: React.FC<SimpleInputModalProps> = ({ title, value, onChange, onClose, onSubmit }) => (
-  <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+  <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
     <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 w-full max-w-sm shadow-2xl animate-fade-in-up">
        <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-bold text-white">{title}</h3>
@@ -441,7 +441,7 @@ const ManageItemsModal: React.FC<ManageItemsModalProps> = ({ title, items, onClo
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
       <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 w-full max-w-md shadow-2xl animate-fade-in-up flex flex-col max-h-[80vh]">
          <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
             <h3 className="text-lg font-bold text-white">{title}</h3>

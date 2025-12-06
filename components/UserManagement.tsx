@@ -194,7 +194,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
         ))}
       </div>
 
-      {/* User Modal - Adjusted Positioning: items-start + pt-32 to push it down */}
+      {/* User Modal - Positioned with pt-32 to push down from menu, z-index 9999 forced */}
       {isModalOpen && (
         <div 
           className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-start justify-center p-4 pt-32"
