@@ -47,7 +47,6 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
   };
 
   const handleDelete = (id: string) => {
-    // Basic check for admin safety
     const user = users.find(u => u.id === id);
     if (user && user.role === 'ADMIN' && users.filter(u => u.role === 'ADMIN').length <= 1) {
       alert('Não é possível excluir o único administrador.');
@@ -76,14 +75,14 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
     setLoading(true);
     try {
       const userData: User = {
-        id: editingUser.id || '', // DB will generate ID if empty usually, but we handle in db service
+        id: editingUser.id || '',
         name: editingUser.name,
         email: editingUser.email,
         role: editingUser.role as UserRole || 'COLLABORATOR',
         allowedUnits: editingUser.allowedUnits || [],
         active: editingUser.active ?? true,
         createdAt: editingUser.createdAt || new Date().toISOString(),
-        passwordHash: editingUser.passwordHash || '' // Logic handled in DB service to keep old pass if empty
+        passwordHash: editingUser.passwordHash || ''
       } as User;
 
       await db.saveUser(userData);
@@ -196,7 +195,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
 
       {/* User Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
           <div className="bg-gray-800 border border-gray-700 rounded-xl w-full max-w-2xl shadow-2xl animate-fade-in-up flex flex-col max-h-[90vh]">
             <div className="flex justify-between items-center p-6 border-b border-gray-700">
               <h3 className="text-xl font-bold text-white">

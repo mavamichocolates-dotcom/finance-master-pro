@@ -3,7 +3,6 @@ import { Transaction, User, UserRole, TransactionType, PaymentStatus } from '../
 import { UNITS } from '../constants';
 
 // --- TYPES MAPPING ---
-// Interfaces to match Supabase DB columns (snake_case)
 interface DBUser {
   id: string;
   name: string;
@@ -18,7 +17,7 @@ interface DBUser {
 interface DBTransaction {
   id: string;
   user_id: string;
-  store_name: string; // mapped to 'unit' in app
+  store_name: string;
   description: string;
   amount: number;
   type: TransactionType;
@@ -28,11 +27,6 @@ interface DBTransaction {
   installments_current: number | null;
   installments_total: number | null;
   created_at: string;
-}
-
-interface DBStore {
-  id: string;
-  name: string;
 }
 
 class DBService {
@@ -72,7 +66,6 @@ class DBService {
     };
 
     if (user.id && user.id.length > 10) { 
-      // Update existing (UUID check roughly)
       const { data, error } = await supabase
         .from('app_users')
         .update(dbUser)
@@ -83,7 +76,6 @@ class DBService {
       if (error) throw error;
       return { ...user, id: data.id };
     } else {
-      // Create new
       const { data, error } = await supabase
         .from('app_users')
         .insert(dbUser)
@@ -100,11 +92,12 @@ class DBService {
     if (error) throw error;
   }
 
-  async findUserByEmail(email: string): Promise<User | null> {
+  // BUSCA POR NOME OU EMAIL (Para login flexível)
+  async findUserByIdentifier(identifier: string): Promise<User | null> {
     const { data, error } = await supabase
       .from('app_users')
       .select('*')
-      .eq('email', email)
+      .or(`email.eq.${identifier},name.eq.${identifier}`)
       .single();
 
     if (error || !data) return null;
@@ -151,10 +144,6 @@ class DBService {
       userId: t.user_id,
       createdAt: t.created_at
     }));
-  }
-
-  async saveTransactions(transactions: Transaction[]): Promise<void> {
-    console.warn("Bulk saveTransactions is deprecated in Online Mode. Use specific methods.");
   }
 
   async addTransaction(t: Transaction): Promise<Transaction | null> {
