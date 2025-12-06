@@ -90,7 +90,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
       await loadUsers();
     } catch (e) {
       console.error(e);
-      alert('Erro ao salvar usuário.');
+      alert('Erro ao salvar usuário. Verifique se o email já existe ou se as permissões (RLS) estão configuradas no Supabase.');
     } finally {
       setLoading(false);
     }
@@ -194,7 +194,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
         ))}
       </div>
 
-      {/* User Modal - Adjusted pt-40 to be well below the header */}
+      {/* User Modal - Forced z-index and padding to clear header */}
       {isModalOpen && (
         <div 
           className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-start justify-center p-4 pt-40"
