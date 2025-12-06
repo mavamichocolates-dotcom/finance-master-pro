@@ -154,11 +154,6 @@ class DBService {
   }
 
   async saveTransactions(transactions: Transaction[]): Promise<void> {
-    // This method is now mostly used for bulk inserts or updates
-    // In the new App.tsx, we will likely insert one by one or batch insert new ones
-    // For compatibility with the old code structure which passed the WHOLE array:
-    // We should prefer specific methods: insertTransaction, updateTransaction, deleteTransaction
-    // But to adapt the code provided:
     console.warn("Bulk saveTransactions is deprecated in Online Mode. Use specific methods.");
   }
 

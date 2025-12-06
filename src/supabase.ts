@@ -1,15 +1,22 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Access environment variables safely.
-// We cast import.meta to any to avoid TypeScript errors if vite/client types are missing or not configured in tsconfig.
+// Safely access environment variables
+// We use a safe access pattern because in some build environments
+// import.meta.env might be undefined during initialization.
 const env = (import.meta as any).env || {};
 
 const supabaseUrl = env.VITE_SUPABASE_URL;
 const supabaseKey = env.VITE_SUPABASE_ANON_KEY;
 
+// Logic to prevent "White Screen" crash if keys are missing.
+// We export a client, but warnings will appear in console if config is wrong.
 if (!supabaseUrl || !supabaseKey) {
-  console.warn('Supabase Environment Variables are missing. Check your .env file or Vercel settings.');
+  console.warn('CRITICAL: Supabase Environment Variables are missing. The app will not connect to the database.');
 }
 
-// Create client with fallback empty strings to prevent crash, though API calls will fail if keys are missing
-export const supabase = createClient(supabaseUrl || '', supabaseKey || '');
+// Create the client. If URL is missing, we pass a dummy URL to prevent immediate crash,
+// allowing the UI to render (and likely show a connection error later).
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co', 
+  supabaseKey || 'placeholder-key'
+);
