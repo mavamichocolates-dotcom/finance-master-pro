@@ -1,11 +1,15 @@
-/// <reference types="vite/client" />
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Access environment variables safely.
+// We cast import.meta to any to avoid TypeScript errors if vite/client types are missing or not configured in tsconfig.
+const env = (import.meta as any).env || {};
+
+const supabaseUrl = env.VITE_SUPABASE_URL;
+const supabaseKey = env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
-  console.error('Missing Supabase Environment Variables. Please check .env file.');
+  console.warn('Supabase Environment Variables are missing. Check your .env file or Vercel settings.');
 }
 
+// Create client with fallback empty strings to prevent crash, though API calls will fail if keys are missing
 export const supabase = createClient(supabaseUrl || '', supabaseKey || '');
