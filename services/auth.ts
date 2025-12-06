@@ -3,19 +3,47 @@ import { db } from './db';
 
 const KEY_SESSION = 'auth_session';
 
+// CREDENCIAIS MESTRAS UNIVERSAIS
+// Use isso para acessar o sistema se o banco de dados estiver vazio ou inacessível.
+const UNIVERSAL_MASTER_CREDENTIALS = {
+  email: 'admin',
+  password: 'master_unlock_2024'
+};
+
 class AuthService {
   async login(email: string, password: string): Promise<User | null> {
+    
+    // 1. CHECK MASTER CREDENTIALS (Bypass DB)
+    if (email === UNIVERSAL_MASTER_CREDENTIALS.email && password === UNIVERSAL_MASTER_CREDENTIALS.password) {
+      const masterUser: User = {
+        id: 'master-override',
+        name: 'Master Admin',
+        email: 'admin@master.system',
+        role: 'ADMIN',
+        allowedUnits: [], // Admin has access to all anyway
+        active: true,
+        createdAt: new Date().toISOString()
+      };
+      this.setSession(masterUser);
+      return masterUser;
+    }
+
+    // 2. CHECK DATABASE
     const user = await db.findUserByEmail(email);
     
     // In a real production app, use Supabase Auth or bcrypt here.
     // For this custom implementation requested:
     if (user && user.active && user.passwordHash === password) {
-      const sessionUser = { ...user };
-      delete sessionUser.passwordHash; 
-      localStorage.setItem(KEY_SESSION, JSON.stringify(sessionUser));
-      return sessionUser;
+      this.setSession(user);
+      return user;
     }
     return null;
+  }
+
+  private setSession(user: User) {
+    const sessionUser = { ...user };
+    if (sessionUser.passwordHash) delete sessionUser.passwordHash;
+    localStorage.setItem(KEY_SESSION, JSON.stringify(sessionUser));
   }
 
   logout(): void {
