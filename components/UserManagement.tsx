@@ -194,10 +194,10 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
         ))}
       </div>
 
-      {/* User Modal - Positioned with pt-32 to push down from menu, z-index 9999 forced */}
+      {/* User Modal - Adjusted pt-40 to be well below the header */}
       {isModalOpen && (
         <div 
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-start justify-center p-4 pt-32"
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-start justify-center p-4 pt-40"
           style={{ zIndex: 9999 }}
         >
           <div className="bg-gray-800 border border-gray-700 rounded-xl w-full max-w-2xl shadow-2xl animate-fade-in-up flex flex-col max-h-[80vh]">
