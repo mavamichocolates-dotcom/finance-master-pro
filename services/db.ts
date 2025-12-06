@@ -56,7 +56,7 @@ class DBService {
   }
 
   async saveUser(user: User): Promise<User | null> {
-    const dbUser = {
+    const dbUser: any = {
       name: user.name,
       email: user.email,
       password_hash: user.passwordHash,
@@ -65,6 +65,7 @@ class DBService {
       active: user.active
     };
 
+    // UPDATE
     if (user.id && user.id.length > 10) { 
       const { data, error } = await supabase
         .from('app_users')
@@ -75,7 +76,12 @@ class DBService {
         
       if (error) throw error;
       return { ...user, id: data.id };
-    } else {
+    } 
+    // CREATE (Insert)
+    else {
+      // Remover ID vazio se existir para evitar erro de UUID inválido
+      if (user.id === '') delete (user as any).id;
+      
       const { data, error } = await supabase
         .from('app_users')
         .insert(dbUser)
@@ -94,6 +100,7 @@ class DBService {
 
   // BUSCA POR NOME OU EMAIL (Para login flexível)
   async findUserByIdentifier(identifier: string): Promise<User | null> {
+    // Tenta buscar por email OU nome
     const { data, error } = await supabase
       .from('app_users')
       .select('*')
@@ -147,8 +154,11 @@ class DBService {
   }
 
   async addTransaction(t: Transaction): Promise<Transaction | null> {
+    // Se for o usuário mestre (id fake), não enviamos userId para o banco para não quebrar FK
+    const validUserId = t.userId === 'master-override' ? null : t.userId;
+
     const dbTx = {
-      user_id: t.userId,
+      user_id: validUserId,
       store_name: t.unit,
       description: t.description,
       amount: t.amount,

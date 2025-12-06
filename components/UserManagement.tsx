@@ -75,7 +75,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
     setLoading(true);
     try {
       const userData: User = {
-        id: editingUser.id || '',
+        id: editingUser.id || '', // Se for vazio, o DB/Supabase gera
         name: editingUser.name,
         email: editingUser.email,
         role: editingUser.role as UserRole || 'COLLABORATOR',
@@ -89,6 +89,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
       setIsModalOpen(false);
       await loadUsers();
     } catch (e) {
+      console.error(e);
       alert('Erro ao salvar usuário.');
     } finally {
       setLoading(false);
@@ -193,9 +194,9 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
         ))}
       </div>
 
-      {/* User Modal */}
+      {/* User Modal - Z-INDEX AUMENTADO PARA 9999 */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
           <div className="bg-gray-800 border border-gray-700 rounded-xl w-full max-w-2xl shadow-2xl animate-fade-in-up flex flex-col max-h-[90vh]">
             <div className="flex justify-between items-center p-6 border-b border-gray-700">
               <h3 className="text-xl font-bold text-white">
@@ -209,23 +210,25 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
             <form onSubmit={handleSave} className="p-6 overflow-y-auto custom-scrollbar">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-1">Nome Completo</label>
+                  <label className="block text-sm font-medium text-gray-400 mb-1">Nome Completo (Usado no Login)</label>
                   <input
                     type="text"
                     required
                     value={editingUser.name}
                     onChange={e => setEditingUser({...editingUser, name: e.target.value})}
                     className="w-full bg-gray-900 border border-gray-600 rounded-lg p-2.5 text-white focus:border-blue-500 outline-none"
+                    placeholder="Ex: Mavami"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-1">E-mail (Login)</label>
+                  <label className="block text-sm font-medium text-gray-400 mb-1">E-mail</label>
                   <input
                     type="text"
                     required
                     value={editingUser.email}
                     onChange={e => setEditingUser({...editingUser, email: e.target.value})}
                     className="w-full bg-gray-900 border border-gray-600 rounded-lg p-2.5 text-white focus:border-blue-500 outline-none"
+                    placeholder="exemplo@mavami.com"
                   />
                 </div>
                 <div>
