@@ -10,7 +10,7 @@ import ConfirmModal from './components/ConfirmModal';
 import Login from './components/Login';
 import UserManagement from './components/UserManagement';
 import { formatCurrency } from './utils';
-import { LayoutDashboard, Wallet, Receipt, TrendingUp, TrendingDown, DollarSign, Building2, LogOut, Shield, User as UserIcon, Loader2, HardDrive, WifiOff } from 'lucide-react';
+import { LayoutDashboard, Wallet, Receipt, TrendingUp, TrendingDown, DollarSign, Building2, LogOut, Shield, User as UserIcon, Loader2, HardDrive, Cloud, CloudOff } from 'lucide-react';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from './constants';
 import { isSupabaseConfigured } from './src/supabase';
 
@@ -323,6 +323,17 @@ const App: React.FC = () => {
                 <div className="flex items-center gap-2 text-xs text-gray-500">
                   <UserIcon size={10} />
                   <span className="uppercase tracking-widest">{currentUser.name} ({currentUser.role})</span>
+                  {/* Status Indicator */}
+                  <span className="mx-1 text-gray-700">|</span>
+                  {isSupabaseConfigured ? (
+                    <span className="flex items-center gap-1 text-green-500 font-bold" title="Dados salvos na nuvem">
+                      <Cloud size={12} /> On-line
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-orange-500 font-bold" title="Dados salvos localmente">
+                      <HardDrive size={12} /> Local
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -387,8 +398,8 @@ const App: React.FC = () => {
       
       {/* STATUS BANNER */}
       {!isSupabaseConfigured && (
-        <div className="bg-blue-600/20 border-b border-blue-600/50 text-blue-200 px-4 py-2 text-center text-xs font-bold flex items-center justify-center gap-2">
-           <HardDrive size={14} />
+        <div className="bg-orange-600/20 border-b border-orange-600/50 text-orange-200 px-4 py-2 text-center text-xs font-bold flex items-center justify-center gap-2">
+           <CloudOff size={14} />
            MODO LOCAL (OFFLINE): Os dados estão salvos apenas neste navegador. Configure o Supabase na Vercel para sincronizar na nuvem.
         </div>
       )}
