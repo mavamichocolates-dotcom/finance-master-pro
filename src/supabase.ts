@@ -1,21 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Safely access environment variables
-// We use a safe access pattern because in some build environments
-// import.meta.env might be undefined during initialization.
-const env = (import.meta as any).env || {};
+// Access environment variables using Vite's standard import.meta.env
+// We use optional chaining (?.) to prevent crashes if import.meta.env is undefined in certain environments
+const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env?.VITE_SUPABASE_ANON_KEY;
 
-const supabaseUrl = env.VITE_SUPABASE_URL;
-const supabaseKey = env.VITE_SUPABASE_ANON_KEY;
-
-// Logic to prevent "White Screen" crash if keys are missing.
-// We export a client, but warnings will appear in console if config is wrong.
+// Warn if keys are missing (helpful for debugging deploy issues)
 if (!supabaseUrl || !supabaseKey) {
-  console.warn('CRITICAL: Supabase Environment Variables are missing. The app will not connect to the database.');
+  console.warn('FinanceMaster Pro: VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY is missing. Database connection will fail.');
 }
 
-// Create the client. If URL is missing, we pass a dummy URL to prevent immediate crash,
-// allowing the UI to render (and likely show a connection error later).
+// Create the client with fallback to prevent build crash
 export const supabase = createClient(
   supabaseUrl || 'https://placeholder.supabase.co', 
   supabaseKey || 'placeholder-key'

@@ -39,14 +39,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [installments, setInstallments] = useState(1);
   const [unit, setUnit] = useState(defaultUnit || (units.length > 0 ? units[0] : ''));
 
-  // Update unit if defaultUnit changes (e.g. global filter change)
+  // Update unit if defaultUnit changes or units load
   useEffect(() => {
     if (defaultUnit) {
       setUnit(defaultUnit);
     } else if (units.length > 0 && !unit) {
       setUnit(units[0]);
     }
-  }, [defaultUnit, units]);
+  }, [defaultUnit, units]); // Removed 'unit' from deps to avoid cycle
 
   // Modal State
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
