@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
 import { db } from '../services/db';
-import { Trash2, Edit2, UserPlus, Shield, Store, Save, X, Loader2, AlertCircle, Skull } from 'lucide-react';
+import { Trash2, Edit2, UserPlus, Shield, Store, Save, X, Loader2, AlertCircle, Skull, Network, CheckCircle2 } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 
 interface UserManagementProps {
@@ -124,6 +124,21 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
     }
   };
 
+  const handleTestConnection = async () => {
+    setLoading(true);
+    try {
+      const start = performance.now();
+      await db.getUnits(); // Leitura leve para teste
+      const end = performance.now();
+      const time = (end - start).toFixed(0);
+      alert(`✅ SUCESSO! Conexão estável com o Banco de Dados.\nTempo de resposta: ${time}ms`);
+    } catch (e: any) {
+      alert(`❌ ERRO DE CONEXÃO: ${e.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // DANGER ZONE FUNCTION
   const handleResetSystem = () => {
     const confirmation = window.prompt('ATENÇÃO: ISSO APAGARÁ TODOS OS DADOS (USUÁRIOS, TRANSAÇÕES, LOJAS).\n\nPara confirmar, digite "DELETAR TUDO" abaixo:');
@@ -242,25 +257,50 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
         )}
       </div>
 
-      {/* DANGER ZONE - Always visible at bottom */}
-      <div className="mt-12 border border-red-900/50 rounded-lg bg-red-900/10 p-6">
-        <div className="flex items-center gap-3 mb-4">
-           <div className="bg-red-900/30 p-2 rounded text-red-500">
-             <Skull size={24} />
-           </div>
-           <div>
-             <h3 className="text-lg font-bold text-red-400">Zona de Perigo</h3>
-             <p className="text-xs text-red-300/70">Ações irreversíveis que afetam todo o banco de dados.</p>
-           </div>
-        </div>
+      {/* SYSTEM TOOLS AREA */}
+      <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">
         
-        <button 
-          onClick={handleResetSystem}
-          className="bg-red-700 hover:bg-red-600 text-white px-4 py-2 rounded font-bold text-sm flex items-center gap-2 transition-colors shadow-lg"
-        >
-          <Trash2 size={16} />
-          RESETAR SISTEMA (APAGAR TUDO)
-        </button>
+        {/* Connection Check */}
+        <div className="border border-blue-900/30 rounded-lg bg-blue-900/10 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="bg-blue-900/30 p-2 rounded text-blue-400">
+              <Network size={24} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-blue-400">Diagnóstico</h3>
+              <p className="text-xs text-blue-300/70">Verifique a comunicação com o servidor.</p>
+            </div>
+          </div>
+          <button 
+            onClick={handleTestConnection}
+            className="w-full bg-blue-800/50 hover:bg-blue-700/50 text-blue-200 border border-blue-700/50 px-4 py-2 rounded font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+          >
+            <CheckCircle2 size={16} />
+            Testar Conexão com Nuvem
+          </button>
+        </div>
+
+        {/* DANGER ZONE */}
+        <div className="border border-red-900/30 rounded-lg bg-red-900/10 p-6">
+          <div className="flex items-center gap-3 mb-4">
+             <div className="bg-red-900/30 p-2 rounded text-red-500">
+               <Skull size={24} />
+             </div>
+             <div>
+               <h3 className="text-lg font-bold text-red-400">Zona de Perigo</h3>
+               <p className="text-xs text-red-300/70">Ações irreversíveis que afetam todo o banco de dados.</p>
+             </div>
+          </div>
+          
+          <button 
+            onClick={handleResetSystem}
+            className="w-full bg-red-900/50 hover:bg-red-800/50 text-red-200 border border-red-800/50 px-4 py-2 rounded font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+          >
+            <Trash2 size={16} />
+            RESETAR SISTEMA (APAGAR TUDO)
+          </button>
+        </div>
+
       </div>
 
       {/* User Modal - Forced z-index and padding to clear header */}
