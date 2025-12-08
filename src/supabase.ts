@@ -1,12 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Função auxiliar para acessar variáveis de ambiente de forma segura
-// Isso evita o erro "Cannot read properties of undefined" se import.meta.env não estiver definido
 const getEnv = (key: string) => {
-  // Verificamos explicitamente se import.meta.env existe antes de tentar acessar propriedades.
-  // Escrevemos o caminho completo (ex: import.meta.env.VITE_SUPABASE_URL) para que o Vite
-  // consiga encontrar e substituir a string estaticamente durante o build.
-  
   if (key === 'VITE_SUPABASE_URL') {
     return (import.meta.env && import.meta.env.VITE_SUPABASE_URL) || '';
   }
@@ -19,16 +14,24 @@ const getEnv = (key: string) => {
 const supabaseUrl = getEnv('VITE_SUPABASE_URL');
 const supabaseKey = getEnv('VITE_SUPABASE_ANON_KEY');
 
-// Aviso no console se as chaves estiverem faltando (útil para debug em deploy)
-if (!supabaseUrl || !supabaseKey) {
-  console.warn(
-    'FinanceMaster Pro: Credenciais do Supabase não encontradas. ' +
-    'Verifique se o arquivo .env existe ou se as variáveis de ambiente foram configuradas no painel de deploy.'
-  );
+// Lógica rigorosa para definir se o Supabase está realmente configurado
+const isUrlValid = (url: string) => {
+  return url && 
+         url !== 'undefined' && 
+         !url.includes('placeholder') && 
+         url.startsWith('http');
+};
+
+export const isSupabaseConfigured = isUrlValid(supabaseUrl) && !!supabaseKey;
+
+// Log discreto apenas para dev
+if (!isSupabaseConfigured) {
+  console.log('FinanceMaster Pro: Modo Offline/Local Ativado (Supabase não configurado).');
 }
 
-// Cria o cliente com valores de fallback para evitar crash total da aplicação
+// Cria o cliente. Se não estiver configurado, usamos null ou um cliente dummy
+// para garantir que a exportação exista, mas o db.ts vai ignorá-la.
 export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co', 
-  supabaseKey || 'placeholder-key'
+  isSupabaseConfigured ? supabaseUrl : 'https://placeholder.supabase.co', 
+  isSupabaseConfigured ? supabaseKey : 'placeholder-key'
 );

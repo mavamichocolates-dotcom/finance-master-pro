@@ -10,8 +10,9 @@ import ConfirmModal from './components/ConfirmModal';
 import Login from './components/Login';
 import UserManagement from './components/UserManagement';
 import { formatCurrency } from './utils';
-import { LayoutDashboard, Wallet, Receipt, TrendingUp, TrendingDown, DollarSign, Building2, LogOut, Shield, User as UserIcon, Loader2 } from 'lucide-react';
+import { LayoutDashboard, Wallet, Receipt, TrendingUp, TrendingDown, DollarSign, Building2, LogOut, Shield, User as UserIcon, Loader2, HardDrive, WifiOff } from 'lucide-react';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from './constants';
+import { isSupabaseConfigured } from './src/supabase';
 
 // Tabs Enum
 enum ActiveTab {
@@ -68,6 +69,7 @@ const App: React.FC = () => {
       if (user) {
         setIsLoading(true);
         try {
+          // Now fetches from LocalStorage OR Supabase automatically
           const [txs, dbUnits] = await Promise.all([
             db.getTransactions(),
             db.getUnits()
@@ -131,13 +133,16 @@ const App: React.FC = () => {
     } catch (error: any) {
       console.error(error);
       let msg = "Erro ao salvar transação.";
+      const errString = String(error);
       
-      // Tratamento de erros comuns do Supabase/Postgres
-      if (error?.code === '23503') { // Foreign Key Violation
-         msg = "Erro: A unidade/loja selecionada não existe no banco de dados. Tente recarregar a página para corrigir as lojas.";
+      if (errString.includes("Failed to fetch")) {
+         msg = "ERRO DE CONEXÃO:\nNão foi possível contatar o banco de dados. Verifique sua internet.";
+      }
+      else if (error?.code === '23503') { // Foreign Key Violation
+         msg = "Erro: A unidade/loja selecionada não existe no banco de dados. Tente recarregar a página.";
       } 
       else if (error?.code === '42501') { // RLS Violation
-         msg = "Erro de Permissão (RLS): O banco de dados recusou a gravação. Verifique as configurações no Supabase.";
+         msg = "Erro de Permissão (RLS): O banco de dados recusou a gravação. Contate o administrador.";
       }
       else if (error?.message) {
          msg += ` Detalhes: ${error.message}`;
@@ -198,7 +203,7 @@ const App: React.FC = () => {
       const newList = prev[listKey].map(c => c === oldName ? newName : c);
       return { ...prev, [listKey]: newList };
     });
-    // In a real app we might batch update DB, here we update local state representation
+    // Update local state representation
     setTransactions(prev => prev.map(t => {
       if (t.type === type && t.category === oldName) {
         return { ...t, category: newName };
@@ -235,8 +240,6 @@ const App: React.FC = () => {
   };
 
   const handleRenameUnit = (oldName: string, newName: string) => {
-    // DB rename not implemented in simple store table for now, would require ID based logic
-    // We update local state
     setUnits(prev => prev.map(u => u === oldName ? newName : u));
   };
 
@@ -267,16 +270,12 @@ const App: React.FC = () => {
 
   // --- RENDERING HELPERS ---
 
-  // Filter Units based on User Permissions
   const availableUnits = currentUser?.role === 'ADMIN' 
     ? units 
     : units.filter(u => currentUser?.allowedUnits?.includes(u));
 
-  // Filter Transactions based on Unit selection AND User Permissions
   const filteredTransactions = transactions.filter(t => {
-    // 1. Check Permission
     if (!auth.canAccessUnit(currentUser!, t.unit || '')) return false;
-    // 2. Check Selection
     if (selectedUnit === 'ALL') return true;
     return t.unit === selectedUnit;
   });
@@ -385,11 +384,19 @@ const App: React.FC = () => {
           </div>
         </div>
       </header>
+      
+      {/* STATUS BANNER */}
+      {!isSupabaseConfigured && (
+        <div className="bg-blue-600/20 border-b border-blue-600/50 text-blue-200 px-4 py-2 text-center text-xs font-bold flex items-center justify-center gap-2">
+           <HardDrive size={14} />
+           MODO LOCAL (OFFLINE): Os dados estão salvos apenas neste navegador. Configure o Supabase na Vercel para sincronizar na nuvem.
+        </div>
+      )}
 
       {/* MAIN CONTENT */}
       <main className="container mx-auto px-4 py-8 flex flex-col gap-8">
         
-        {/* TOP CARDS (Summary) - Always visible except on Dashboard */}
+        {/* TOP CARDS (Summary) */}
         {activeTab !== ActiveTab.DASHBOARD && activeTab !== ActiveTab.USERS && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <SummaryCard 
@@ -481,7 +488,6 @@ const App: React.FC = () => {
   );
 };
 
-// Helper for Tab Button
 const TabButton: React.FC<{ active: boolean; onClick: () => void; icon: React.ReactNode; label: string }> = ({ active, onClick, icon, label }) => (
   <button
     type="button"
