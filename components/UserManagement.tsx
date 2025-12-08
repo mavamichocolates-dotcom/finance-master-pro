@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
 import { db } from '../services/db';
-import { Trash2, Edit2, UserPlus, Shield, Store, Save, X, Loader2 } from 'lucide-react';
+import { Trash2, Edit2, UserPlus, Shield, Store, Save, X, Loader2, AlertCircle } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 
 interface UserManagementProps {
@@ -57,8 +57,14 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
       isOpen: true,
       action: async () => {
         setLoading(true);
-        await db.deleteUser(id);
-        await loadUsers();
+        try {
+          await db.deleteUser(id);
+          await loadUsers();
+        } catch (error: any) {
+          alert(`Erro ao excluir: ${error.message || 'Erro desconhecido'}`);
+        } finally {
+          setLoading(false);
+        }
       }
     });
   };
@@ -88,9 +94,23 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
       await db.saveUser(userData);
       setIsModalOpen(false);
       await loadUsers();
-    } catch (e) {
-      console.error(e);
-      alert('Erro ao salvar usuário. Verifique se o email já existe ou se as permissões (RLS) estão configuradas no Supabase.');
+    } catch (error: any) {
+      console.error("Erro ao salvar usuário:", error);
+      
+      let msg = 'Erro desconhecido ao salvar usuário.';
+      
+      // Tratamento específico de erros comuns do Supabase / Postgres
+      if (error?.code === '42501') {
+        msg = 'ERRO DE PERMISSÃO (RLS): O Supabase bloqueou a gravação.\n\nSOLUÇÃO: No painel do Supabase, vá em "Table Editor" > "app_users" e DESABILITE o RLS (Row Level Security) ou adicione uma política permitindo acesso público (anon).';
+      } else if (error?.code === '23505') {
+        msg = 'Este e-mail já está cadastrado no sistema.';
+      } else if (error?.code === '42P01') {
+        msg = 'Tabela não encontrada (42P01). Verifique se você rodou o script SQL de criação do banco de dados no Supabase.';
+      } else if (error?.message) {
+        msg = `Erro: ${error.message}`;
+      }
+      
+      alert(msg);
     } finally {
       setLoading(false);
     }
@@ -106,7 +126,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
   };
 
   if (loading && !isModalOpen && users.length === 0) {
-    return <div className="p-8 text-center text-gray-500"><Loader2 className="animate-spin inline mr-2"/> Carregando usuários...</div>;
+    return <div className="p-8 text-center text-gray-500 flex justify-center items-center"><Loader2 className="animate-spin inline mr-2"/> Carregando usuários...</div>;
   }
 
   return (
@@ -121,7 +141,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
         </div>
         <button
           onClick={() => handleEdit()}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-bold shadow-lg"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-bold shadow-lg transition-transform hover:scale-105"
         >
           <UserPlus size={20} />
           Novo Usuário
@@ -130,18 +150,18 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {users.map(user => (
-          <div key={user.id} className="bg-gray-800 border border-gray-700 rounded-lg p-5 hover:border-blue-500/50 transition-colors shadow-lg flex flex-col justify-between">
+          <div key={user.id} className="bg-gray-800 border border-gray-700 rounded-lg p-5 hover:border-blue-500/50 transition-colors shadow-lg flex flex-col justify-between group">
             <div>
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg shadow-inner ${
                     user.role === 'ADMIN' ? 'bg-blue-900/50 text-blue-400' : 
                     user.role === 'MANAGER' ? 'bg-purple-900/50 text-purple-400' : 'bg-gray-700 text-gray-400'
                   }`}>
                     {user.name.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <h3 className="text-white font-bold">{user.name}</h3>
+                    <h3 className="text-white font-bold group-hover:text-blue-400 transition-colors">{user.name}</h3>
                     <p className="text-xs text-gray-500">{user.email}</p>
                   </div>
                 </div>
@@ -161,20 +181,24 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
                   </p>
                   <div className="flex flex-wrap gap-1">
                     {user.role === 'ADMIN' ? (
-                      <span className="text-xs bg-green-900/30 text-green-400 px-2 py-0.5 rounded border border-green-900/50">Acesso Total</span>
+                      <span className="text-xs bg-green-900/30 text-green-400 px-2 py-0.5 rounded border border-green-900/50 flex items-center gap-1">
+                        <Shield size={10} /> Acesso Total
+                      </span>
                     ) : user.allowedUnits.length > 0 ? (
                       user.allowedUnits.map(u => (
                         <span key={u} className="text-xs bg-gray-700 px-2 py-0.5 rounded text-gray-300">{u}</span>
                       ))
                     ) : (
-                      <span className="text-xs text-red-400 italic">Nenhuma loja atribuída</span>
+                      <span className="text-xs text-red-400 italic flex items-center gap-1">
+                        <AlertCircle size={10} /> Nenhuma loja
+                      </span>
                     )}
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-4 border-t border-gray-700">
+            <div className="flex justify-end gap-2 pt-4 border-t border-gray-700 opacity-60 group-hover:opacity-100 transition-opacity">
               <button 
                 onClick={() => handleEdit(user)}
                 className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
@@ -192,20 +216,28 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
             </div>
           </div>
         ))}
+
+        {users.length === 0 && !loading && (
+          <div className="col-span-full py-10 text-center text-gray-500 bg-gray-800/50 rounded-lg border border-gray-700 border-dashed">
+            <p>Nenhum usuário encontrado (além do admin mestre).</p>
+            <p className="text-sm mt-2">Clique em "Novo Usuário" para começar.</p>
+          </div>
+        )}
       </div>
 
       {/* User Modal - Forced z-index and padding to clear header */}
       {isModalOpen && (
         <div 
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-start justify-center p-4 pt-40"
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-start justify-center p-4 pt-20 md:pt-40"
           style={{ zIndex: 9999 }}
         >
-          <div className="bg-gray-800 border border-gray-700 rounded-xl w-full max-w-2xl shadow-2xl animate-fade-in-up flex flex-col max-h-[80vh]">
-            <div className="flex justify-between items-center p-6 border-b border-gray-700">
-              <h3 className="text-xl font-bold text-white">
+          <div className="bg-gray-800 border border-gray-700 rounded-xl w-full max-w-2xl shadow-2xl animate-fade-in-up flex flex-col max-h-[85vh]">
+            <div className="flex justify-between items-center p-6 border-b border-gray-700 bg-gray-800 rounded-t-xl sticky top-0 z-10">
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                {editingUser.id ? <Edit2 size={20} className="text-blue-500" /> : <UserPlus size={20} className="text-blue-500" />}
                 {editingUser.id ? 'Editar Usuário' : 'Novo Usuário'}
               </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white">
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white transition-colors">
                 <X size={24} />
               </button>
             </div>
@@ -219,7 +251,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
                     required
                     value={editingUser.name}
                     onChange={e => setEditingUser({...editingUser, name: e.target.value})}
-                    className="w-full bg-gray-900 border border-gray-600 rounded-lg p-2.5 text-white focus:border-blue-500 outline-none"
+                    className="w-full bg-gray-900 border border-gray-600 rounded-lg p-2.5 text-white focus:border-blue-500 outline-none transition-colors"
                     placeholder="Ex: Mavami"
                   />
                 </div>
@@ -230,7 +262,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
                     required
                     value={editingUser.email}
                     onChange={e => setEditingUser({...editingUser, email: e.target.value})}
-                    className="w-full bg-gray-900 border border-gray-600 rounded-lg p-2.5 text-white focus:border-blue-500 outline-none"
+                    className="w-full bg-gray-900 border border-gray-600 rounded-lg p-2.5 text-white focus:border-blue-500 outline-none transition-colors"
                     placeholder="exemplo@mavami.com"
                   />
                 </div>
@@ -241,15 +273,16 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
                     placeholder={editingUser.id ? "Deixe em branco para manter" : "Senha obrigatória"}
                     value={editingUser.passwordHash}
                     onChange={e => setEditingUser({...editingUser, passwordHash: e.target.value})}
-                    className="w-full bg-gray-900 border border-gray-600 rounded-lg p-2.5 text-white focus:border-blue-500 outline-none"
+                    className="w-full bg-gray-900 border border-gray-600 rounded-lg p-2.5 text-white focus:border-blue-500 outline-none transition-colors"
                   />
+                  <p className="text-xs text-gray-600 mt-1">Armazenada internamente (hash simples).</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-400 mb-1">Função (Cargo)</label>
                   <select
                     value={editingUser.role}
                     onChange={e => setEditingUser({...editingUser, role: e.target.value as UserRole})}
-                    className="w-full bg-gray-900 border border-gray-600 rounded-lg p-2.5 text-white focus:border-blue-500 outline-none"
+                    className="w-full bg-gray-900 border border-gray-600 rounded-lg p-2.5 text-white focus:border-blue-500 outline-none cursor-pointer"
                   >
                     <option value="COLLABORATOR">Colaborador (Apenas Registra)</option>
                     <option value="MANAGER">Gestor (Visualiza Relatórios)</option>
@@ -261,36 +294,40 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
               {editingUser.role !== 'ADMIN' && (
                 <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
                   <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-                    <Store size={16} /> Permissões de Loja
+                    <Store size={16} className="text-blue-400" /> Permissões de Loja
                   </h4>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {availableUnits.map(unit => (
-                      <label key={unit} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer hover:text-white">
-                        <input
-                          type="checkbox"
-                          checked={editingUser.allowedUnits?.includes(unit)}
-                          onChange={() => toggleUnitPermission(unit)}
-                          className="w-4 h-4 rounded border-gray-600 text-blue-600 bg-gray-800 focus:ring-blue-500"
-                        />
-                        {unit}
-                      </label>
-                    ))}
-                  </div>
+                  {availableUnits.length === 0 ? (
+                    <p className="text-sm text-gray-500 italic">Nenhuma unidade cadastrada no sistema.</p>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      {availableUnits.map(unit => (
+                        <label key={unit} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer hover:text-white select-none">
+                          <input
+                            type="checkbox"
+                            checked={editingUser.allowedUnits?.includes(unit)}
+                            onChange={() => toggleUnitPermission(unit)}
+                            className="w-4 h-4 rounded border-gray-600 text-blue-600 bg-gray-800 focus:ring-blue-500 focus:ring-offset-gray-900"
+                          />
+                          {unit}
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
-              <div className="flex justify-end gap-3 mt-8">
+              <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-700">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg"
+                  className="px-4 py-2 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-lg flex items-center gap-2"
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 transition-all"
                 >
                   {loading ? <Loader2 className="animate-spin" size={18}/> : <Save size={18} />} 
                   Salvar Usuário
@@ -304,7 +341,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
       <ConfirmModal 
         isOpen={confirmConfig.isOpen}
         title="Excluir Usuário"
-        message="Tem certeza que deseja remover este usuário? O histórico de lançamentos dele será mantido."
+        message="Tem certeza que deseja remover este usuário? O histórico de lançamentos dele será mantido para fins de auditoria."
         onConfirm={() => {
           confirmConfig.action();
           setConfirmConfig({isOpen: false, action: () => {}});

@@ -40,6 +40,7 @@ class DBService {
 
     if (error) {
       console.error('Error fetching users:', error);
+      // Retorna vazio para não quebrar a UI se a tabela não existir
       return [];
     }
 
@@ -61,7 +62,7 @@ class DBService {
       email: user.email,
       password_hash: user.passwordHash,
       role: user.role,
-      allowed_units: user.allowedUnits,
+      allowed_units: user.allowedUnits || [],
       active: user.active
     };
 
@@ -74,21 +75,25 @@ class DBService {
         .select()
         .single();
         
-      if (error) throw error;
+      if (error) {
+        console.error("DB Update Error:", error);
+        throw error;
+      }
       return { ...user, id: data.id };
     } 
     // CREATE (Insert)
     else {
-      // Remover ID vazio se existir para evitar erro de UUID inválido
-      if (user.id === '') delete (user as any).id;
-      
+      // Nota: Não enviamos 'id' no dbUser, o Supabase gera o UUID automaticamente.
       const { data, error } = await supabase
         .from('app_users')
         .insert(dbUser)
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error("DB Insert Error:", error);
+        throw error;
+      }
       return { ...user, id: data.id, createdAt: data.created_at };
     }
   }
@@ -177,7 +182,7 @@ class DBService {
       .single();
 
     if (error) {
-      console.error(error);
+      console.error("Add Transaction Error:", error);
       throw error;
     }
     
