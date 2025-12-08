@@ -321,6 +321,11 @@ class DBService {
       const { data, error } = await supabase.from('stores').select('name');
       
       if (error) {
+        // DETECT TABLE NOT FOUND ERROR (42P01)
+        // This allows the App to show the Setup Screen
+        if (error.code === '42P01') {
+           throw new Error("MISSING_TABLES");
+        }
         console.error("Erro ao buscar lojas (Supabase):", error);
         return UNITS; 
       }
@@ -335,7 +340,8 @@ class DBService {
 
       const storeNames = data.map((s: any) => s.name);
       return storeNames.length > 0 ? storeNames : UNITS;
-    } catch (e) {
+    } catch (e: any) {
+      if (e.message === "MISSING_TABLES") throw e; // Re-throw to be caught by App.tsx
       return UNITS;
     }
   }
