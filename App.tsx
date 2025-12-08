@@ -128,8 +128,22 @@ const App: React.FC = () => {
         if (saved) savedTxs.push(saved);
       }
       setTransactions((prev) => [...prev, ...savedTxs]);
-    } catch (error) {
-      alert("Erro ao salvar transação. Verifique a conexão.");
+    } catch (error: any) {
+      console.error(error);
+      let msg = "Erro ao salvar transação.";
+      
+      // Tratamento de erros comuns do Supabase/Postgres
+      if (error?.code === '23503') { // Foreign Key Violation
+         msg = "Erro: A unidade/loja selecionada não existe no banco de dados. Tente recarregar a página para corrigir as lojas.";
+      } 
+      else if (error?.code === '42501') { // RLS Violation
+         msg = "Erro de Permissão (RLS): O banco de dados recusou a gravação. Verifique as configurações no Supabase.";
+      }
+      else if (error?.message) {
+         msg += ` Detalhes: ${error.message}`;
+      }
+      
+      alert(msg);
     } finally {
       setIsLoading(false);
     }

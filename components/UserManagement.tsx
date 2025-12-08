@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
 import { db } from '../services/db';
-import { Trash2, Edit2, UserPlus, Shield, Store, Save, X, Loader2, AlertCircle } from 'lucide-react';
+import { Trash2, Edit2, UserPlus, Shield, Store, Save, X, Loader2, AlertCircle, Skull } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 
 interface UserManagementProps {
@@ -99,7 +99,6 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
       
       let msg = 'Erro desconhecido ao salvar usuário.';
       
-      // Tratamento específico de erros comuns do Supabase / Postgres
       if (error?.code === '42501') {
         msg = 'ERRO DE PERMISSÃO (RLS): O Supabase bloqueou a gravação.\n\nSOLUÇÃO: No painel do Supabase, vá em "Table Editor" > "app_users" e DESABILITE o RLS (Row Level Security) ou adicione uma política permitindo acesso público (anon).';
       } else if (error?.code === '23505') {
@@ -125,12 +124,30 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
     }
   };
 
+  // DANGER ZONE FUNCTION
+  const handleResetSystem = () => {
+    const confirmation = window.prompt('ATENÇÃO: ISSO APAGARÁ TODOS OS DADOS (USUÁRIOS, TRANSAÇÕES, LOJAS).\n\nPara confirmar, digite "DELETAR TUDO" abaixo:');
+    
+    if (confirmation === "DELETAR TUDO") {
+      setLoading(true);
+      db.clearAllData()
+        .then(() => {
+          alert('Sistema resetado com sucesso! A página será recarregada.');
+          window.location.reload(); // FORÇA RECARREGAR PARA RECRIAR AS LOJAS PADRÃO
+        })
+        .catch((err) => {
+          alert('Erro ao resetar: ' + err.message);
+        })
+        .finally(() => setLoading(false));
+    }
+  };
+
   if (loading && !isModalOpen && users.length === 0) {
     return <div className="p-8 text-center text-gray-500 flex justify-center items-center"><Loader2 className="animate-spin inline mr-2"/> Carregando usuários...</div>;
   }
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-6 animate-fade-in-up pb-10">
       <div className="flex justify-between items-center bg-gray-800 p-6 rounded-lg border border-gray-700 shadow-lg">
         <div>
           <h2 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -223,6 +240,27 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
             <p className="text-sm mt-2">Clique em "Novo Usuário" para começar.</p>
           </div>
         )}
+      </div>
+
+      {/* DANGER ZONE - Always visible at bottom */}
+      <div className="mt-12 border border-red-900/50 rounded-lg bg-red-900/10 p-6">
+        <div className="flex items-center gap-3 mb-4">
+           <div className="bg-red-900/30 p-2 rounded text-red-500">
+             <Skull size={24} />
+           </div>
+           <div>
+             <h3 className="text-lg font-bold text-red-400">Zona de Perigo</h3>
+             <p className="text-xs text-red-300/70">Ações irreversíveis que afetam todo o banco de dados.</p>
+           </div>
+        </div>
+        
+        <button 
+          onClick={handleResetSystem}
+          className="bg-red-700 hover:bg-red-600 text-white px-4 py-2 rounded font-bold text-sm flex items-center gap-2 transition-colors shadow-lg"
+        >
+          <Trash2 size={16} />
+          RESETAR SISTEMA (APAGAR TUDO)
+        </button>
       </div>
 
       {/* User Modal - Forced z-index and padding to clear header */}

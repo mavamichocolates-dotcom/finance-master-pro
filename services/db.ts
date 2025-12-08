@@ -100,7 +100,10 @@ class DBService {
 
   async deleteUser(id: string): Promise<void> {
     const { error } = await supabase.from('app_users').delete().eq('id', id);
-    if (error) throw error;
+    if (error) {
+      console.error("Error deleting user:", error);
+      throw error;
+    }
   }
 
   // BUSCA POR NOME OU EMAIL (Para login flexível)
@@ -182,7 +185,7 @@ class DBService {
       .single();
 
     if (error) {
-      console.error("Add Transaction Error:", error);
+      // Propaga o erro para o App.tsx tratar com mensagens amigáveis
       throw error;
     }
     
@@ -217,19 +220,69 @@ class DBService {
 
   async getUnits(): Promise<string[]> {
     const { data, error } = await supabase.from('stores').select('name');
-    if (error) {
-      return UNITS; // Fallback
+    
+    // CORREÇÃO CRÍTICA: Se a tabela estiver vazia (pós-reset), criar as lojas padrão
+    // Isso evita o erro de Chave Estrangeira (Foreign Key) ao tentar salvar transações
+    if (!error && data && data.length === 0) {
+      console.log("Banco de lojas vazio detectado. Restaurando lojas padrão...");
+      const { error: insertError } = await supabase
+        .from('stores')
+        .insert(UNITS.map(name => ({ name })));
+      
+      if (!insertError) {
+        return UNITS;
+      } else {
+        console.error("Erro ao restaurar lojas padrão:", insertError);
+      }
     }
+
+    if (error) {
+      console.error("Erro ao buscar lojas:", error);
+      return UNITS; // Fallback visual
+    }
+    
     const storeNames = data.map((s: any) => s.name);
     return storeNames.length > 0 ? storeNames : UNITS;
   }
 
   async addUnit(name: string): Promise<void> {
-    await supabase.from('stores').insert({ name });
+    const { error } = await supabase.from('stores').insert({ name });
+    if (error) throw error;
   }
 
   async deleteUnit(name: string): Promise<void> {
     await supabase.from('stores').delete().eq('name', name);
+  }
+
+  // --- DANGER ZONE ---
+  
+  async clearAllData(): Promise<void> {
+    // Nota: O método .delete() do supabase exige um filtro para segurança.
+    // Usamos neq('id', 0) para simular um "delete all" seguro.
+    
+    // 1. Limpar transações
+    const { error: txError } = await supabase
+      .from('transactions')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000'); // UUID vazio padrão como filtro "tudo exceto isso"
+    
+    if (txError) throw new Error(`Erro ao limpar transações: ${txError.message}`);
+
+    // 2. Limpar usuários
+    const { error: uError } = await supabase
+      .from('app_users')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (uError) throw new Error(`Erro ao limpar usuários: ${uError.message}`);
+
+    // 3. Limpar Lojas
+    const { error: sError } = await supabase
+      .from('stores')
+      .delete()
+      .neq('name', 'PLACEHOLDER_IMPOSSIBLE_NAME'); // Filtro genérico para lojas
+
+    if (sError) throw new Error(`Erro ao limpar lojas: ${sError.message}`);
   }
 }
 
