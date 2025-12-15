@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Transaction, TransactionType, PaymentStatus, User } from './types';
 import { db } from './services/db';
 import { auth } from './services/auth';
@@ -9,8 +9,8 @@ import SummaryCard from './components/SummaryCard';
 import ConfirmModal from './components/ConfirmModal';
 import Login from './components/Login';
 import UserManagement from './components/UserManagement';
-import { formatCurrency } from './utils';
-import { LayoutDashboard, Wallet, Receipt, TrendingUp, TrendingDown, DollarSign, Building2, LogOut, Shield, User as UserIcon, Loader2, HardDrive, Cloud, CloudOff, Database, Copy, CheckCircle2 } from 'lucide-react';
+import { formatCurrency, formatDate } from './utils';
+import { LayoutDashboard, Wallet, Receipt, TrendingUp, TrendingDown, DollarSign, Building2, LogOut, Shield, User as UserIcon, Loader2, HardDrive, Cloud, CloudOff, Database, Copy, CheckCircle2, History, ArrowRight } from 'lucide-react';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from './constants';
 import { isSupabaseConfigured } from './src/supabase';
 
@@ -23,9 +23,6 @@ enum ActiveTab {
 }
 
 const SQL_SETUP_SCRIPT = `-- MELHORIA DE SEGURANÇA E INTEGRIDADE
--- Copie e rode este script no SQL Editor do Supabase. 
--- Ele é seguro para rodar mesmo se as tabelas já existirem.
-
 -- 1. TABELAS (Estrutura Básica)
 CREATE TABLE IF NOT EXISTS app_users (
   id text PRIMARY KEY,
@@ -58,10 +55,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   created_at timestamptz DEFAULT now()
 );
 
--- 2. INTEGRIDADE REFERENCIAL (Foreign Keys)
--- Garante que transações não fiquem órfãs se um usuário for deletado (Set Null)
--- Garante que transações pertençam a lojas existentes
-
+-- 2. INTEGRIDADE REFERENCIAL
 DO $$ BEGIN
   ALTER TABLE transactions 
   ADD CONSTRAINT fk_transactions_users 
@@ -78,16 +72,12 @@ EXCEPTION
   WHEN duplicate_object THEN null;
 END $$;
 
--- 3. PERFORMANCE E SEGURANÇA (Indexes)
--- Cria índices para evitar lentidão e potenciais ataques de DoS em queries pesadas
+-- 3. PERFORMANCE E SEGURANÇA
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
 CREATE INDEX IF NOT EXISTS idx_transactions_store ON transactions(store_name);
 
 -- 4. POLÍTICAS DE ACESSO (RLS)
--- Nota: Como o app gerencia a autenticação internamente, mantemos o acesso público
--- para a chave 'anon', mas a integridade dos dados agora é garantida pelo banco.
-
 ALTER TABLE app_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE stores ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
@@ -104,7 +94,7 @@ DO $$ BEGIN
   CREATE POLICY "Public Access Transactions" ON transactions FOR ALL USING (true) WITH CHECK (true);
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
--- 5. DADOS INICIAIS (Se necessário)
+-- 5. DADOS INICIAIS
 INSERT INTO stores (name) VALUES 
 ('Mavami Cookies Osasco'),
 ('Mavami Cookies SP'),
@@ -157,13 +147,13 @@ const App: React.FC = () => {
   // --- INITIALIZATION ---
   useEffect(() => {
     const initApp = async () => {
-      const user = auth.getCurrentUser();
-      setCurrentUser(user);
-      setAuthChecked(true);
-      
-      if (user) {
-        setIsLoading(true);
-        try {
+      try {
+        const user = auth.getCurrentUser();
+        setCurrentUser(user);
+        setAuthChecked(true);
+        
+        if (user) {
+          setIsLoading(true);
           // Now fetches from LocalStorage OR Supabase automatically
           // We added db.getUsers() to ensure the Users table also exists
           const [txs, dbUnits] = await Promise.all([
@@ -179,15 +169,14 @@ const App: React.FC = () => {
              setShowConnectionSuccess(true);
              setTimeout(() => setShowConnectionSuccess(false), 5000);
           }
-
-        } catch (error: any) {
-          console.error("Failed to load initial data", error);
-          if (error.message === "MISSING_TABLES") {
-            setIsDatabaseReady(false);
-          }
-        } finally {
-          setIsLoading(false);
         }
+      } catch (error: any) {
+        console.error("Failed to load initial data", error);
+        if (error.message === "MISSING_TABLES") {
+          setIsDatabaseReady(false);
+        }
+      } finally {
+        setIsLoading(false);
       }
     };
     
@@ -414,6 +403,19 @@ const App: React.FC = () => {
   const monthExpense = currentMonthTxs.filter(t => t.type === TransactionType.EXPENSE).reduce((s, t) => s + t.amount, 0);
   const pendingExpense = currentMonthTxs.filter(t => t.type === TransactionType.EXPENSE && t.status === PaymentStatus.PENDING).reduce((s, t) => s + t.amount, 0);
 
+  // --- LAST TRANSACTION HELPER ---
+  const lastTransaction = useMemo(() => {
+    if (transactions.length === 0) return null;
+    
+    // Sort logic to find the absolutely most recent entry
+    // We try to use createdAt if available, otherwise date
+    return [...transactions].sort((a, b) => {
+      const timeA = new Date(a.createdAt || a.date).getTime();
+      const timeB = new Date(b.createdAt || b.date).getTime();
+      return timeB - timeA; // Descending
+    })[0];
+  }, [transactions]);
+
   // --- RENDER ---
 
   if (!authChecked) return null;
@@ -634,8 +636,10 @@ const App: React.FC = () => {
                 onRenameUnit={handleRenameUnit}
                 onDeleteUnit={handleDeleteUnit}
                 defaultUnit={selectedUnit !== 'ALL' ? selectedUnit : availableUnits[0]}
+                lastTransaction={lastTransaction}
               />
-              <div className="text-center text-gray-500 mt-8 hidden md:block">
+
+              <div className="text-center text-gray-500 mt-2 hidden md:block text-xs">
                 <p>Cadastre suas entradas e saídas acima. Utilize a aba "Gerenciamento" para editar erros.</p>
               </div>
             </div>

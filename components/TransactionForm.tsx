@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Save, Calendar, DollarSign, Tag, List, X, Building2, Settings, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Save, Calendar, DollarSign, Tag, List, X, Building2, Settings, Edit2, Trash2, History, TrendingUp, TrendingDown, CheckCircle2 } from 'lucide-react';
 import { TransactionType, PaymentStatus, Transaction } from '../types';
-import { generateId, getTodayString } from '../utils';
+import { generateId, getTodayString, formatCurrency, formatDate } from '../utils';
 
 interface TransactionFormProps {
   onAddTransaction: (transactions: Transaction[]) => void;
@@ -15,6 +15,7 @@ interface TransactionFormProps {
   onRenameUnit: (oldName: string, newName: string) => void;
   onDeleteUnit: (name: string) => void;
   defaultUnit?: string;
+  lastTransaction?: Transaction | null;
 }
 
 const TransactionForm: React.FC<TransactionFormProps> = ({ 
@@ -28,7 +29,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   onAddUnit,
   onRenameUnit,
   onDeleteUnit,
-  defaultUnit
+  defaultUnit,
+  lastTransaction
 }) => {
   const [type, setType] = useState<TransactionType>(TransactionType.EXPENSE);
   const [description, setDescription] = useState('');
@@ -129,7 +131,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const headerColor = type === TransactionType.INCOME ? 'bg-green-700' : 'bg-red-700';
 
   return (
-    <div className="bg-gray-800 rounded-lg shadow-xl overflow-hidden border border-gray-700 relative">
+    <div className="bg-gray-800 rounded-lg shadow-xl overflow-hidden border border-gray-700 relative flex flex-col">
       <div className={`${headerColor} p-4 text-white flex justify-between items-center transition-colors duration-300`}>
         <h2 className="text-xl font-bold flex items-center gap-2">
           {type === TransactionType.INCOME ? <Plus size={24} /> : <DollarSign size={24} />}
@@ -316,6 +318,49 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           </button>
         </div>
       </form>
+      
+      {/* LAST TRANSACTION FOOTER */}
+      {lastTransaction && (
+        <div className="bg-gray-900/50 border-t border-gray-700 p-4 animate-fade-in-up">
+           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              
+              <div className="flex items-center gap-3">
+                 <div className="flex flex-col">
+                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex items-center gap-1 mb-1">
+                      <History size={12} /> Último Lançamento Salvo
+                    </span>
+                    <div className="flex items-center gap-2 text-white font-medium">
+                      <span className={`text-xs px-2 py-0.5 rounded font-bold ${lastTransaction.type === TransactionType.INCOME ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                         {lastTransaction.type === TransactionType.INCOME ? 'Entrada' : 'Saída'}
+                      </span>
+                      <span>{lastTransaction.description}</span>
+                    </div>
+                 </div>
+              </div>
+
+              <div className="flex items-center gap-6 text-sm text-gray-300 w-full md:w-auto justify-between md:justify-end">
+                 <div className="flex flex-col">
+                    <span className="text-[10px] text-gray-500 uppercase">Data</span>
+                    <span>{formatDate(lastTransaction.date)}</span>
+                 </div>
+                 <div className="flex flex-col">
+                    <span className="text-[10px] text-gray-500 uppercase">Valor</span>
+                    <span className={`font-bold ${lastTransaction.type === TransactionType.INCOME ? 'text-green-400' : 'text-red-400'}`}>
+                      {formatCurrency(lastTransaction.amount)}
+                    </span>
+                 </div>
+                 <div className="hidden md:flex flex-col">
+                    <span className="text-[10px] text-gray-500 uppercase">Unidade</span>
+                    <span className="truncate max-w-[150px]">{lastTransaction.unit}</span>
+                 </div>
+                 <div className="text-green-500">
+                    <CheckCircle2 size={20} />
+                 </div>
+              </div>
+
+           </div>
+        </div>
+      )}
 
       {/* --- MODALS --- */}
 
