@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
-import { Upload, X, CheckCircle2, AlertCircle, ArrowRight, Trash2, FileText } from 'lucide-react';
+import { Upload, X, CheckCircle2, AlertCircle, ArrowRight, Trash2, FileText, Sparkles, Loader2 } from 'lucide-react';
 import { Transaction, TransactionType, PaymentStatus } from '../types';
 import { generateId, formatCurrency } from '../utils';
+import { GoogleGenAI, Type } from "@google/genai";
 
 interface BankImportModalProps {
   isOpen: boolean;
@@ -34,6 +35,7 @@ const BankImportModal: React.FC<BankImportModalProps> = ({
   const [step, setStep] = useState<1 | 2>(1);
   const [items, setItems] = useState<ImportedItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
@@ -99,7 +101,7 @@ const BankImportModal: React.FC<BankImportModalProps> = ({
         // Determine Type
         const type = rawAmount >= 0 ? TransactionType.INCOME : TransactionType.EXPENSE;
         
-        // --- SMART CATEGORIZATION AI ---
+        // --- BASIC REGEX CATEGORIZATION (First Pass) ---
         let category = 'Outros';
         const lowerDesc = description.toLowerCase();
 
@@ -162,6 +164,84 @@ const BankImportModal: React.FC<BankImportModalProps> = ({
     });
 
     setItems(transactions);
+  };
+
+  // --- AI CATEGORIZATION ---
+  const handleAiCategorization = async () => {
+    if (!process.env.API_KEY) {
+       alert("Chave de API não configurada. A IA não pode ser iniciada.");
+       return;
+    }
+
+    setAiLoading(true);
+    try {
+      // 1. Filter unique descriptions to save tokens and time
+      // We only want to categorize items that are currently selected or all items
+      const uniqueItems = Array.from(new Set(items.map(i => i.description)));
+      
+      const allCategories = [...incomeCategories, ...expenseCategories];
+
+      // 2. Init Gemini
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      
+      // 3. Prompt Engineering
+      const prompt = `
+        You are a financial assistant. I have a list of bank transaction descriptions.
+        Map each description to the EXACT category name from the provided list that best fits.
+        
+        Categories Available: ${JSON.stringify(allCategories)}
+        
+        Transactions:
+        ${JSON.stringify(uniqueItems)}
+        
+        If you are unsure, use "Outros".
+        Return a JSON array of objects with 'description' and 'category'.
+      `;
+
+      // 4. Call Model
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                description: { type: Type.STRING },
+                category: { type: Type.STRING },
+              }
+            }
+          }
+        }
+      });
+
+      // 5. Parse and Apply
+      const jsonResponse = JSON.parse(response.text || '[]');
+      const categoryMap = new Map<string, string>();
+      
+      jsonResponse.forEach((item: any) => {
+        if (item.description && item.category) {
+          categoryMap.set(item.description, item.category);
+        }
+      });
+
+      // 6. Update State
+      setItems(prevItems => prevItems.map(item => {
+        const newCat = categoryMap.get(item.description);
+        if (newCat) {
+          return { ...item, category: newCat };
+        }
+        return item;
+      }));
+
+    } catch (error) {
+      console.error("AI Categorization failed:", error);
+      alert("Erro ao classificar com IA. Verifique sua conexão ou tente novamente.");
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   const handleProcessImport = () => {
@@ -242,13 +322,26 @@ const BankImportModal: React.FC<BankImportModalProps> = ({
 
           {step === 2 && (
              <div className="space-y-4">
-                <div className="flex justify-between items-center bg-gray-900/50 p-3 rounded-lg border border-gray-700">
-                   <span className="text-sm text-gray-300">
-                     Encontrados <strong>{items.length}</strong> lançamentos. Selecione os que deseja importar.
-                   </span>
-                   <div className="flex gap-2">
-                      <button onClick={() => setItems(prev => prev.map(i => ({...i, selected: true})))} className="text-xs text-blue-400 hover:underline">Marcar Todos</button>
-                      <button onClick={() => setItems(prev => prev.map(i => ({...i, selected: false})))} className="text-xs text-gray-400 hover:underline">Desmarcar Todos</button>
+                <div className="flex flex-col md:flex-row justify-between items-center bg-gray-900/50 p-3 rounded-lg border border-gray-700 gap-4">
+                   <div className="text-sm text-gray-300">
+                     Encontrados <strong>{items.length}</strong> lançamentos.
+                   </div>
+                   
+                   <div className="flex gap-2 items-center">
+                      <button 
+                        onClick={handleAiCategorization}
+                        disabled={aiLoading}
+                        className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg transition-all border border-purple-500 disabled:opacity-50"
+                        title="Usar Inteligência Artificial para classificar automaticamente"
+                      >
+                         {aiLoading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                         {aiLoading ? 'Classificando...' : 'Classificar com IA'}
+                      </button>
+
+                      <div className="w-px h-6 bg-gray-700 mx-2 hidden md:block"></div>
+
+                      <button onClick={() => setItems(prev => prev.map(i => ({...i, selected: true})))} className="text-xs text-blue-400 hover:underline whitespace-nowrap">Marcar Todos</button>
+                      <button onClick={() => setItems(prev => prev.map(i => ({...i, selected: false})))} className="text-xs text-gray-400 hover:underline whitespace-nowrap">Desmarcar Todos</button>
                    </div>
                 </div>
 
@@ -298,7 +391,7 @@ const BankImportModal: React.FC<BankImportModalProps> = ({
                              <select
                                value={item.category}
                                onChange={(e) => updateItem(item.tempId, 'category', e.target.value)}
-                               className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs w-32 focus:border-blue-500 outline-none text-white"
+                               className={`bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs w-32 focus:border-blue-500 outline-none text-white ${item.category === 'Outros' ? 'opacity-70' : ''}`}
                              >
                                 {(item.type === TransactionType.INCOME ? incomeCategories : expenseCategories).map(cat => (
                                   <option key={cat} value={cat}>{cat}</option>
