@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Save, Calendar, DollarSign, Tag, List, X, Building2, Settings, Edit2, Trash2, History, TrendingUp, TrendingDown, CheckCircle2 } from 'lucide-react';
+import { Plus, Save, Calendar, DollarSign, Tag, List, X, Building2, Settings, Edit2, Trash2, History, TrendingUp, TrendingDown, CheckCircle2, Copy, Repeat, Divide, ArrowRight, Upload } from 'lucide-react';
 import { TransactionType, PaymentStatus, Transaction } from '../types';
 import { generateId, getTodayString, formatCurrency, formatDate } from '../utils';
+import BankImportModal from './BankImportModal';
 
 interface TransactionFormProps {
   onAddTransaction: (transactions: Transaction[]) => void;
@@ -17,6 +18,8 @@ interface TransactionFormProps {
   defaultUnit?: string;
   lastTransaction?: Transaction | null;
 }
+
+type RepeatMode = 'SINGLE' | 'INSTALLMENT' | 'RECURRING';
 
 const TransactionForm: React.FC<TransactionFormProps> = ({ 
   onAddTransaction, 
@@ -38,7 +41,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [category, setCategory] = useState('');
   const [date, setDate] = useState(getTodayString());
   const [status, setStatus] = useState<PaymentStatus>(PaymentStatus.PAID);
-  const [installments, setInstallments] = useState(1);
+  
+  // Automation States
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>('SINGLE');
+  const [repeatCount, setRepeatCount] = useState(2);
   const [unit, setUnit] = useState(defaultUnit || (units.length > 0 ? units[0] : ''));
 
   // Update unit if defaultUnit changes or units load
@@ -48,7 +54,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     } else if (units.length > 0 && !unit) {
       setUnit(units[0]);
     }
-  }, [defaultUnit, units]); // Removed 'unit' from deps to avoid cycle
+  }, [defaultUnit, units]);
 
   // Modal State
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -59,34 +65,17 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [isUnitManageOpen, setIsUnitManageOpen] = useState(false);
   const [newUnitName, setNewUnitName] = useState('');
 
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!description || !amount || !category || !date || !unit) return;
 
-    const numAmount = parseFloat(amount.replace(',', '.')); // Simple sanitization
+    const numAmount = parseFloat(amount.replace(',', '.'));
     const newTransactions: Transaction[] = [];
 
-    // Handle installments logic
-    if (installments > 1) {
-      const baseDate = new Date(date);
-      
-      for (let i = 0; i < installments; i++) {
-        const installmentDate = new Date(baseDate);
-        installmentDate.setMonth(baseDate.getMonth() + i);
-        
-        newTransactions.push({
-          id: generateId(),
-          description,
-          amount: numAmount / installments, // Divide amount by installments
-          type,
-          category,
-          date: installmentDate.toISOString().split('T')[0],
-          status: i === 0 ? status : PaymentStatus.PENDING, // First one takes current status, others pending
-          installments: { current: i + 1, total: installments },
-          unit,
-        });
-      }
-    } else {
+    if (repeatMode === 'SINGLE') {
+      // Single Transaction
       newTransactions.push({
         id: generateId(),
         description,
@@ -97,6 +86,58 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         status,
         unit,
       });
+    } else {
+      // Multiple Transactions (Installment OR Recurring)
+      const baseDate = new Date(date);
+      const isInstallment = repeatMode === 'INSTALLMENT';
+      
+      // LOGICA DE ARREDONDAMENTO (CORREÇÃO MATEMÁTICA)
+      let installmentValue = numAmount;
+      let firstInstallmentDiff = 0;
+
+      if (isInstallment) {
+        // Calcula o valor base truncado para 2 casas
+        installmentValue = Math.floor((numAmount / repeatCount) * 100) / 100;
+        // Calcula a diferença de centavos que sobrou
+        const totalCalculated = installmentValue * repeatCount;
+        firstInstallmentDiff = numAmount - totalCalculated;
+        // Arredonda a diferença para evitar erros de ponto flutuante (ex: 0.009999999)
+        firstInstallmentDiff = Math.round(firstInstallmentDiff * 100) / 100;
+      }
+
+      for (let i = 0; i < repeatCount; i++) {
+        // Clone date safely
+        const installmentDate = new Date(baseDate.getTime());
+        // Handle month increment carefully to avoid timezone skips
+        // Set the day to 1st to avoid month overflow (e.g. Jan 31 -> Feb 28), 
+        // but here we likely want to keep the day if possible. 
+        // Simple approach: Add month to the date object.
+        installmentDate.setMonth(baseDate.getMonth() + i);
+        
+        // Adjust description based on mode
+        let descSuffix = '';
+        if (isInstallment) descSuffix = `(Parc. ${i + 1}/${repeatCount})`;
+        else descSuffix = `(Mês ${i + 1}/${repeatCount})`;
+
+        // Add the penny difference to the FIRST installment only
+        let currentAmount = installmentValue;
+        if (isInstallment && i === 0) {
+            currentAmount += firstInstallmentDiff;
+        }
+
+        newTransactions.push({
+          id: generateId(),
+          description: `${description} ${descSuffix}`,
+          amount: currentAmount,
+          type,
+          category,
+          date: installmentDate.toISOString().split('T')[0],
+          // First one takes current status, others usually pending (unless user wants all paid)
+          status: i === 0 ? status : PaymentStatus.PENDING,
+          installments: isInstallment ? { current: i + 1, total: repeatCount } : undefined,
+          unit,
+        });
+      }
     }
 
     onAddTransaction(newTransactions);
@@ -104,14 +145,27 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     // Reset form partially
     setDescription('');
     setAmount('');
-    setInstallments(1);
+    setRepeatMode('SINGLE');
+    setRepeatCount(2);
+  };
+
+  const handleCloneLast = () => {
+    if (!lastTransaction) return;
+    setType(lastTransaction.type);
+    setDescription(lastTransaction.description);
+    setAmount(lastTransaction.amount.toString());
+    setCategory(lastTransaction.category);
+    setUnit(lastTransaction.unit || unit);
+    // Keep current date or set to last date? Usually keep 'today' for new entry is better flow
+    // setDate(lastTransaction.date); 
+    setStatus(lastTransaction.status);
   };
 
   const handleSaveNewCategory = (e: React.FormEvent) => {
     e.preventDefault();
     if (newCategoryName.trim()) {
       onAddCategory(type, newCategoryName.trim());
-      setCategory(newCategoryName.trim()); // Auto select the new category
+      setCategory(newCategoryName.trim());
       setNewCategoryName('');
       setIsCategoryModalOpen(false);
     }
@@ -121,7 +175,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     e.preventDefault();
     if (newUnitName.trim()) {
       onAddUnit(newUnitName.trim());
-      setUnit(newUnitName.trim()); // Auto select
+      setUnit(newUnitName.trim());
       setNewUnitName('');
       setIsUnitModalOpen(false);
     }
@@ -137,25 +191,37 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           {type === TransactionType.INCOME ? <Plus size={24} /> : <DollarSign size={24} />}
           Novo Lançamento
         </h2>
-        <div className="flex bg-black/20 rounded-lg p-1">
-          <button
+        <div className="flex gap-3">
+          {/* IMPORT BUTTON */}
+          <button 
             type="button"
-            onClick={() => setType(TransactionType.EXPENSE)}
-            className={`px-4 py-1 rounded-md text-sm font-medium transition-all ${
-              type === TransactionType.EXPENSE ? 'bg-red-500 shadow-md' : 'hover:bg-white/10'
-            }`}
+            onClick={() => setIsImportModalOpen(true)}
+            className="bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-all border border-white/20"
           >
-            Saída
+            <Upload size={14} />
+            Importar Extrato (XML)
           </button>
-          <button
-            type="button"
-            onClick={() => setType(TransactionType.INCOME)}
-            className={`px-4 py-1 rounded-md text-sm font-medium transition-all ${
-              type === TransactionType.INCOME ? 'bg-green-500 shadow-md' : 'hover:bg-white/10'
-            }`}
-          >
-            Entrada
-          </button>
+
+          <div className="flex bg-black/20 rounded-lg p-1">
+            <button
+              type="button"
+              onClick={() => setType(TransactionType.EXPENSE)}
+              className={`px-4 py-1 rounded-md text-sm font-medium transition-all ${
+                type === TransactionType.EXPENSE ? 'bg-red-500 shadow-md' : 'hover:bg-white/10'
+              }`}
+            >
+              Saída
+            </button>
+            <button
+              type="button"
+              onClick={() => setType(TransactionType.INCOME)}
+              className={`px-4 py-1 rounded-md text-sm font-medium transition-all ${
+                type === TransactionType.INCOME ? 'bg-green-500 shadow-md' : 'hover:bg-white/10'
+              }`}
+            >
+              Entrada
+            </button>
+          </div>
         </div>
       </div>
 
@@ -230,7 +296,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         {/* Date */}
         <div>
           <label className="block text-gray-400 text-sm font-bold mb-2 flex items-center gap-2">
-            <Calendar size={16} /> Data
+            <Calendar size={16} /> Data do 1º Lançamento
           </label>
           <input
             type="date"
@@ -291,20 +357,68 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
         </div>
 
-         {/* Installments */}
-         <div>
-          <label className="block text-gray-400 text-sm font-bold mb-2">Parcelas</label>
-          <input
-            type="number"
-            min="1"
-            max="48"
-            value={installments}
-            onChange={(e) => setInstallments(parseInt(e.target.value) || 1)}
-            className="w-full bg-gray-900 text-white border border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:border-blue-500"
-          />
-          <span className="text-xs text-gray-500 mt-1 block">
-             {installments > 1 ? `Serão gerados ${installments} lançamentos` : 'Pagamento à vista'}
-          </span>
+         {/* Automation / Recurrence */}
+         <div className="col-span-1 md:col-span-2">
+          <label className="block text-gray-400 text-sm font-bold mb-2 flex items-center gap-2">
+             <Repeat size={16} /> Automação / Repetição
+          </label>
+          <div className="flex flex-col md:flex-row gap-4 bg-gray-900/50 p-3 rounded-lg border border-gray-700">
+             
+             <div className="flex items-center gap-4">
+               <label className="flex items-center gap-2 cursor-pointer">
+                 <input 
+                   type="radio" 
+                   name="repeatMode" 
+                   checked={repeatMode === 'SINGLE'} 
+                   onChange={() => setRepeatMode('SINGLE')}
+                   className="text-blue-600 focus:ring-blue-500"
+                 />
+                 <span className="text-sm text-gray-300">Único</span>
+               </label>
+
+               <label className="flex items-center gap-2 cursor-pointer" title="Divide o valor total em X parcelas">
+                 <input 
+                   type="radio" 
+                   name="repeatMode" 
+                   checked={repeatMode === 'INSTALLMENT'} 
+                   onChange={() => setRepeatMode('INSTALLMENT')}
+                   className="text-blue-600 focus:ring-blue-500"
+                 />
+                 <span className="text-sm text-gray-300 flex items-center gap-1"><Divide size={12}/> Parcelado</span>
+               </label>
+
+               <label className="flex items-center gap-2 cursor-pointer" title="Repete o MESMO valor por X meses (ex: Aluguel)">
+                 <input 
+                   type="radio" 
+                   name="repeatMode" 
+                   checked={repeatMode === 'RECURRING'} 
+                   onChange={() => setRepeatMode('RECURRING')}
+                   className="text-blue-600 focus:ring-blue-500"
+                 />
+                 <span className="text-sm text-gray-300 flex items-center gap-1"><Repeat size={12}/> Recorrente</span>
+               </label>
+             </div>
+
+             {repeatMode !== 'SINGLE' && (
+               <div className="flex items-center gap-2 animate-fade-in-up">
+                 <span className="text-sm text-gray-400">Quantidade:</span>
+                 <input
+                    type="number"
+                    min="2"
+                    max="60"
+                    value={repeatCount}
+                    onChange={(e) => setRepeatCount(parseInt(e.target.value) || 2)}
+                    className="bg-gray-800 border border-blue-500 rounded px-2 py-1 text-white w-16 text-center text-sm"
+                  />
+                  <span className="text-xs text-gray-500 italic">
+                    {repeatMode === 'INSTALLMENT' 
+                      ? `${formatCurrency((parseFloat(amount || '0') / repeatCount))} / mês`
+                      : `${formatCurrency(parseFloat(amount || '0'))} / mês`
+                    }
+                  </span>
+               </div>
+             )}
+          </div>
         </div>
 
         {/* Submit Button */}
@@ -314,7 +428,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg flex items-center gap-2 transition-transform transform hover:scale-105"
           >
             <Save size={20} />
-            Registrar Lançamento
+            {repeatMode === 'SINGLE' ? 'Registrar Lançamento' : `Gerar ${repeatCount} Lançamentos`}
           </button>
         </div>
       </form>
@@ -324,7 +438,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         <div className="bg-gray-900/50 border-t border-gray-700 p-4 animate-fade-in-up">
            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-grow">
                  <div className="flex flex-col">
                     <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex items-center gap-1 mb-1">
                       <History size={12} /> Último Lançamento Salvo
@@ -333,29 +447,29 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       <span className={`text-xs px-2 py-0.5 rounded font-bold ${lastTransaction.type === TransactionType.INCOME ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
                          {lastTransaction.type === TransactionType.INCOME ? 'Entrada' : 'Saída'}
                       </span>
-                      <span>{lastTransaction.description}</span>
+                      <span className="truncate max-w-[200px]">{lastTransaction.description}</span>
                     </div>
                  </div>
               </div>
 
-              <div className="flex items-center gap-6 text-sm text-gray-300 w-full md:w-auto justify-between md:justify-end">
-                 <div className="flex flex-col">
-                    <span className="text-[10px] text-gray-500 uppercase">Data</span>
-                    <span>{formatDate(lastTransaction.date)}</span>
-                 </div>
+              <div className="flex items-center gap-6 text-sm text-gray-300">
                  <div className="flex flex-col">
                     <span className="text-[10px] text-gray-500 uppercase">Valor</span>
                     <span className={`font-bold ${lastTransaction.type === TransactionType.INCOME ? 'text-green-400' : 'text-red-400'}`}>
                       {formatCurrency(lastTransaction.amount)}
                     </span>
                  </div>
-                 <div className="hidden md:flex flex-col">
-                    <span className="text-[10px] text-gray-500 uppercase">Unidade</span>
-                    <span className="truncate max-w-[150px]">{lastTransaction.unit}</span>
-                 </div>
-                 <div className="text-green-500">
-                    <CheckCircle2 size={20} />
-                 </div>
+                 
+                 <div className="h-8 w-px bg-gray-700 mx-2 hidden md:block"></div>
+
+                 <button
+                   onClick={handleCloneLast}
+                   className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-gray-600 hover:border-gray-500"
+                   title="Preencher formulário com estes dados"
+                 >
+                   <Copy size={14} />
+                   Clonar para Novo
+                 </button>
               </div>
 
            </div>
@@ -363,6 +477,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       )}
 
       {/* --- MODALS --- */}
+
+      <BankImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImport={onAddTransaction}
+        incomeCategories={incomeCategories}
+        expenseCategories={expenseCategories}
+        units={units}
+      />
 
       {/* Add Category Modal */}
       {isCategoryModalOpen && (
