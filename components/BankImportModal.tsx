@@ -73,7 +73,6 @@ const BankImportModal: React.FC<BankImportModalProps> = ({
       if (index === 0) return; // Skip header info before first transaction
 
       // Extract Data using flexible regex that allows whitespace or attributes
-      // Matches <TAG>VALUE</TAG> or <TAG>VALUE (OFX sometimes doesn't close tags properly)
       const getValue = (tag: string) => {
         const regex = new RegExp(`<${tag}[^>]*>(.*?)(?:<\/${tag}>|<|$)`, 'i');
         const match = block.match(regex);
@@ -87,11 +86,22 @@ const BankImportModal: React.FC<BankImportModalProps> = ({
       const nameRaw = getValue('NAME'); // Often contains the description in BR banks
 
       if (dateRaw && amountRaw) {
-        // Parse Date: YYYYMMDDHHMMSS...
+        // Parse Date: YYYYMMDD...
         const formattedDate = `${dateRaw.substring(0, 4)}-${dateRaw.substring(4, 6)}-${dateRaw.substring(6, 8)}`;
         
-        // Parse Amount
-        const rawAmount = parseFloat(amountRaw.replace(',', '.'));
+        // Parse Amount Robustly (Handle BR 1.000,00 vs US 1000.00)
+        let rawAmount = 0;
+        // Check for specific BR pattern: contains both . and , OR contains only ,
+        if (amountRaw.includes(',') && amountRaw.includes('.')) {
+             // Likely 1.234,56 -> Remove dot, replace comma
+             rawAmount = parseFloat(amountRaw.replace(/\./g, '').replace(',', '.'));
+        } else if (amountRaw.includes(',')) {
+             // Likely 1234,56 -> Replace comma
+             rawAmount = parseFloat(amountRaw.replace(',', '.'));
+        } else {
+             // Likely 1234.56 or 1234 -> Parse directly
+             rawAmount = parseFloat(amountRaw);
+        }
         
         // Parse Description (Prefer MEMO, fallback to NAME, fallback to "Transferência")
         let description = (memoRaw || nameRaw || 'Movimentação Bancária').trim();
@@ -176,9 +186,7 @@ const BankImportModal: React.FC<BankImportModalProps> = ({
     setAiLoading(true);
     try {
       // 1. Filter unique descriptions to save tokens and time
-      // We only want to categorize items that are currently selected or all items
       const uniqueItems = Array.from(new Set(items.map(i => i.description)));
-      
       const allCategories = [...incomeCategories, ...expenseCategories];
 
       // 2. Init Gemini
@@ -217,8 +225,12 @@ const BankImportModal: React.FC<BankImportModalProps> = ({
         }
       });
 
-      // 5. Parse and Apply
-      const jsonResponse = JSON.parse(response.text || '[]');
+      // 5. Parse and Apply (CLEAN MARKDOWN)
+      let text = response.text || '[]';
+      // Safety: Strip markdown blocks if the model adds them despite MIME type
+      text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+
+      const jsonResponse = JSON.parse(text);
       const categoryMap = new Map<string, string>();
       
       jsonResponse.forEach((item: any) => {
@@ -255,13 +267,12 @@ const BankImportModal: React.FC<BankImportModalProps> = ({
       type: i.type,
       category: i.category,
       unit: i.unit,
-      status: PaymentStatus.PAID, // Bank imports are usually already paid
+      status: PaymentStatus.PAID,
       createdAt: new Date().toISOString()
     }));
 
     onImport(newTransactions);
     onClose();
-    // Reset
     setTimeout(() => {
       setStep(1);
       setItems([]);
