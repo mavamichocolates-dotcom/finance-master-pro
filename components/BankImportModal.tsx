@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Upload, X, CheckCircle2, AlertCircle, ArrowRight, Trash2, FileText, Sparkles, Loader2 } from 'lucide-react';
+import { Upload, X, CheckCircle2, AlertCircle, ArrowRight, Trash2, FileText, Sparkles, Loader2, ListFilter } from 'lucide-react';
 import { Transaction, TransactionType, PaymentStatus } from '../types';
 import { generateId, formatCurrency } from '../utils';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -36,6 +36,10 @@ const BankImportModal: React.FC<BankImportModalProps> = ({
   const [items, setItems] = useState<ImportedItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
+  
+  // Bulk Edit State
+  const [bulkCategory, setBulkCategory] = useState('');
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
@@ -256,6 +260,21 @@ const BankImportModal: React.FC<BankImportModalProps> = ({
     }
   };
 
+  // --- BULK ACTIONS ---
+  const handleBulkApply = () => {
+    if (!bulkCategory) return;
+    
+    setItems(prev => prev.map(item => {
+      // Only update selected items
+      if (item.selected) {
+        return { ...item, category: bulkCategory };
+      }
+      return item;
+    }));
+    
+    // Optional: clear selector after apply or keep it? Keeping it allows re-apply.
+  };
+
   const handleProcessImport = () => {
     const selectedItems = items.filter(i => i.selected);
     
@@ -276,6 +295,7 @@ const BankImportModal: React.FC<BankImportModalProps> = ({
     setTimeout(() => {
       setStep(1);
       setItems([]);
+      setBulkCategory('');
     }, 500);
   };
 
@@ -354,6 +374,34 @@ const BankImportModal: React.FC<BankImportModalProps> = ({
                       <button onClick={() => setItems(prev => prev.map(i => ({...i, selected: true})))} className="text-xs text-blue-400 hover:underline whitespace-nowrap">Marcar Todos</button>
                       <button onClick={() => setItems(prev => prev.map(i => ({...i, selected: false})))} className="text-xs text-gray-400 hover:underline whitespace-nowrap">Desmarcar Todos</button>
                    </div>
+                </div>
+
+                {/* BULK EDIT TOOLBAR */}
+                <div className="flex items-center gap-2 bg-blue-900/10 p-2 rounded-lg border border-blue-900/30">
+                    <ListFilter size={16} className="text-blue-400 ml-2" />
+                    <span className="text-xs font-bold text-gray-300 uppercase">Definir Categoria em Massa:</span>
+                    
+                    <select
+                      value={bulkCategory}
+                      onChange={(e) => setBulkCategory(e.target.value)}
+                      className="bg-gray-800 border border-gray-600 rounded px-3 py-1 text-xs text-white focus:border-blue-500 outline-none min-w-[200px]"
+                    >
+                       <option value="">Selecione para aplicar...</option>
+                       <optgroup label="Despesas">
+                          {expenseCategories.map(cat => <option key={`exp-${cat}`} value={cat}>{cat}</option>)}
+                       </optgroup>
+                       <optgroup label="Entradas">
+                          {incomeCategories.map(cat => <option key={`inc-${cat}`} value={cat}>{cat}</option>)}
+                       </optgroup>
+                    </select>
+
+                    <button 
+                      onClick={handleBulkApply}
+                      disabled={!bulkCategory}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 rounded text-xs font-bold shadow disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                       Aplicar aos Selecionados
+                    </button>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -437,7 +485,7 @@ const BankImportModal: React.FC<BankImportModalProps> = ({
              </div>
              <div className="flex gap-3">
                 <button 
-                  onClick={() => { setStep(1); setItems([]); }}
+                  onClick={() => { setStep(1); setItems([]); setBulkCategory(''); }}
                   className="px-4 py-2 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
                 >
                   Voltar
