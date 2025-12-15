@@ -64,6 +64,9 @@ class DBService {
       .order('name');
 
     if (error) {
+      // STRICT CHECK: If table doesn't exist, throw specific error to trigger Setup Screen
+      if (error.code === '42P01') throw new Error("MISSING_TABLES");
+      
       console.error('Error fetching users:', error);
       return [];
     }
@@ -198,6 +201,9 @@ class DBService {
       .order('date', { ascending: false });
 
     if (error) {
+      // STRICT CHECK: If table doesn't exist, throw specific error to trigger Setup Screen
+      if (error.code === '42P01') throw new Error("MISSING_TABLES");
+
       console.error('Error fetching transactions:', error);
       return [];
     }
