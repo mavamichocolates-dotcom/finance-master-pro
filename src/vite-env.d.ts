@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 declare module '*.css';
 declare module '*.png';
 declare module '*.svg';
@@ -11,4 +13,13 @@ interface ImportMetaEnv {
 
 interface ImportMeta {
   readonly env: ImportMetaEnv;
+}
+
+// Augment the NodeJS namespace to include API_KEY in ProcessEnv
+// preventing conflicts with @types/node or other definitions of 'process'
+declare namespace NodeJS {
+  interface ProcessEnv {
+    API_KEY?: string;
+    [key: string]: string | undefined;
+  }
 }
