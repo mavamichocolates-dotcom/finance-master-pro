@@ -317,6 +317,22 @@ class DBService {
     if (error) throw error;
   }
 
+  async deleteTransactions(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+
+    // FALLBACK LOCAL
+    if (!isSupabaseConfigured) {
+      const txs = getLocal<Transaction>(LOCAL_KEYS.TRANSACTIONS);
+      const filtered = txs.filter(t => !ids.includes(t.id));
+      setLocal(LOCAL_KEYS.TRANSACTIONS, filtered);
+      return;
+    }
+
+    // SUPABASE
+    const { error } = await supabase.from('transactions').delete().in('id', ids);
+    if (error) throw error;
+  }
+
   // --- STORES/UNITS ---
 
   async getUnits(): Promise<string[]> {

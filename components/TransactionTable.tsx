@@ -1,16 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Transaction, TransactionType, PaymentStatus } from '../types';
 import { formatCurrency, formatDate } from '../utils';
-import { Trash2, Edit, Search, Download, Calendar, FilterX } from 'lucide-react';
+import { Trash2, Edit, Search, Download, Calendar, FilterX, CheckSquare, Square } from 'lucide-react';
 
 interface TransactionTableProps {
   transactions: Transaction[];
   onDelete: (id: string) => void;
+  onDeleteMany: (ids: string[]) => void;
   onUpdate: (updated: Transaction) => void;
   units: string[];
 }
 
-const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDelete, onUpdate, units }) => {
+const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDelete, onDeleteMany, onUpdate, units }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'ALL' | TransactionType>('ALL');
   
@@ -20,6 +21,14 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDel
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Transaction>>({});
+
+  // Selection State
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Reset selection when filters change (to avoid deleting hidden items accidentally)
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [searchTerm, filterType, startDate, endDate]);
 
   // --- FILTER LOGIC ---
   const filteredTransactions = transactions.filter((t) => {
@@ -42,6 +51,37 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDel
 
     return matchesSearch && matchesType && matchesDate;
   }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  // --- SELECTION LOGIC ---
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      // Select all visible transactions
+      const allIds = new Set(filteredTransactions.map(t => t.id));
+      setSelectedIds(allIds);
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleSelectOne = (id: string) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedIds(newSet);
+  };
+
+  const isAllSelected = filteredTransactions.length > 0 && selectedIds.size === filteredTransactions.length;
+  const isIndeterminate = selectedIds.size > 0 && selectedIds.size < filteredTransactions.length;
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size > 0) {
+      onDeleteMany(Array.from(selectedIds));
+      setSelectedIds(new Set());
+    }
+  };
 
   // --- EXPORT LOGIC ---
   const handleExportCSV = () => {
@@ -116,14 +156,26 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDel
             <ListIcon className="text-blue-500" />
             Gerenciamento de Lançamentos
           </h2>
-          <button
-            onClick={handleExportCSV}
-            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-lg"
-            title="Baixar CSV para Excel"
-          >
-            <Download size={16} />
-            Exportar CSV
-          </button>
+          
+          <div className="flex gap-2">
+            {selectedIds.size > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-lg animate-fade-in-up"
+              >
+                <Trash2 size={16} />
+                Excluir ({selectedIds.size})
+              </button>
+            )}
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-lg"
+              title="Baixar CSV para Excel"
+            >
+              <Download size={16} />
+              Exportar CSV
+            </button>
+          </div>
         </div>
         
         {/* Filters Bar */}
@@ -201,6 +253,17 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDel
         <table className="w-full text-sm text-left text-gray-300">
           <thead className="text-xs text-gray-400 uppercase bg-gray-950 sticky top-0 z-10 shadow-md">
             <tr>
+              <th className="px-4 py-3 text-center w-12">
+                <input 
+                  type="checkbox" 
+                  className="w-4 h-4 rounded border-gray-600 text-blue-600 bg-gray-800 focus:ring-blue-500 cursor-pointer"
+                  checked={isAllSelected}
+                  ref={input => {
+                    if (input) input.indeterminate = isIndeterminate;
+                  }}
+                  onChange={handleSelectAll}
+                />
+              </th>
               <th className="px-4 py-3">Data</th>
               <th className="px-4 py-3">Descrição</th>
               <th className="px-4 py-3">Categoria</th>
@@ -214,14 +277,25 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDel
           <tbody>
             {filteredTransactions.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-center py-12 text-gray-500 flex flex-col items-center justify-center w-full absolute mt-10">
+                <td colSpan={9} className="text-center py-12 text-gray-500 flex flex-col items-center justify-center w-full absolute mt-10">
                   <Search size={48} className="mb-4 opacity-20" />
                   <p>Nenhum lançamento encontrado para os filtros selecionados.</p>
                 </td>
               </tr>
             ) : (
               filteredTransactions.map((t) => (
-                <tr key={t.id} className="border-b border-gray-700 hover:bg-gray-700/50 transition-colors group">
+                <tr key={t.id} className={`border-b border-gray-700 transition-colors group ${selectedIds.has(t.id) ? 'bg-blue-900/20 hover:bg-blue-900/30' : 'hover:bg-gray-700/50'}`}>
+                  
+                  {/* CHECKBOX COLUMN */}
+                  <td className="px-4 py-3 text-center align-middle">
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 rounded border-gray-600 text-blue-600 bg-gray-800 focus:ring-blue-500 cursor-pointer"
+                      checked={selectedIds.has(t.id)}
+                      onChange={() => handleSelectOne(t.id)}
+                    />
+                  </td>
+
                   {editingId === t.id ? (
                     // EDIT MODE
                     <>
@@ -289,7 +363,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDel
                   ) : (
                     // VIEW MODE
                     <>
-                      <td className="px-4 py-3 font-medium whitespace-nowrap text-white">
+                      <td className="px-4 py-3 font-medium whitespace-nowrap text-white" onClick={() => handleSelectOne(t.id)}>
                         {formatDate(t.date)}
                       </td>
                       <td className="px-4 py-3">

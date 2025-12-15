@@ -17,6 +17,7 @@ interface TransactionFormProps {
   onDeleteUnit: (name: string) => void;
   defaultUnit?: string;
   lastTransaction?: Transaction | null;
+  existingTransactions: Transaction[];
 }
 
 type RepeatMode = 'SINGLE' | 'INSTALLMENT' | 'RECURRING';
@@ -33,7 +34,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   onRenameUnit,
   onDeleteUnit,
   defaultUnit,
-  lastTransaction
+  lastTransaction,
+  existingTransactions
 }) => {
   const [type, setType] = useState<TransactionType>(TransactionType.EXPENSE);
   const [description, setDescription] = useState('');
@@ -66,6 +68,30 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [newUnitName, setNewUnitName] = useState('');
 
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+  // Wrapper function to check duplicates before saving
+  const handleTransactionSubmit = (newTxs: Transaction[]) => {
+    // Check for duplicates
+    // We match: Date, Amount (roughly), Description (case insensitive), Type and Unit
+    const duplicates = newTxs.filter(newTx =>
+      existingTransactions.some(existing =>
+        existing.date === newTx.date &&
+        Math.abs(existing.amount - newTx.amount) < 0.01 &&
+        existing.description.trim().toLowerCase() === newTx.description.trim().toLowerCase() &&
+        existing.type === newTx.type &&
+        existing.unit === newTx.unit
+      )
+    );
+
+    if (duplicates.length > 0) {
+      const confirmMsg = `Atenção: Encontramos ${duplicates.length} lançamento(s) que parecem duplicados (mesma data, descrição, valor e unidade).\n\nEx: ${duplicates[0].description} - ${formatCurrency(duplicates[0].amount)}\n\nDeseja salvar mesmo assim?`;
+      if (!window.confirm(confirmMsg)) {
+        return; // User cancelled
+      }
+    }
+
+    onAddTransaction(newTxs);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,7 +166,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       }
     }
 
-    onAddTransaction(newTransactions);
+    // Call the wrapper instead of direct prop
+    handleTransactionSubmit(newTransactions);
     
     // Reset form partially
     setDescription('');
@@ -481,7 +508,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       <BankImportModal
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
-        onImport={onAddTransaction}
+        onImport={handleTransactionSubmit}
         incomeCategories={incomeCategories}
         expenseCategories={expenseCategories}
         units={units}

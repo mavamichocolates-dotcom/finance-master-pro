@@ -285,6 +285,24 @@ const App: React.FC = () => {
     });
   };
 
+  const handleDeleteTransactions = (ids: string[]) => {
+    openConfirm(
+      'Excluir Selecionados',
+      `Tem certeza que deseja excluir ${ids.length} lançamentos selecionados? Esta ação não pode ser desfeita.`,
+      async () => {
+        setIsLoading(true);
+        try {
+          await db.deleteTransactions(ids);
+          setTransactions((prev) => prev.filter((t) => !ids.includes(t.id)));
+        } catch (e) {
+          alert("Erro ao excluir itens.");
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    );
+  };
+
   const handleUpdateTransaction = async (updated: Transaction) => {
     setIsLoading(true);
     try {
@@ -637,6 +655,7 @@ const App: React.FC = () => {
                 onDeleteUnit={handleDeleteUnit}
                 defaultUnit={selectedUnit !== 'ALL' ? selectedUnit : availableUnits[0]}
                 lastTransaction={lastTransaction}
+                existingTransactions={transactions}
               />
 
               <div className="text-center text-gray-500 mt-2 hidden md:block text-xs">
@@ -650,6 +669,7 @@ const App: React.FC = () => {
                <TransactionTable 
                   transactions={filteredTransactions} 
                   onDelete={handleDeleteTransaction}
+                  onDeleteMany={handleDeleteTransactions}
                   onUpdate={handleUpdateTransaction}
                   units={availableUnits}
                />
