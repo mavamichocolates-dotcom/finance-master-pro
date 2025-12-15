@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Save, Calendar, DollarSign, Tag, List, X, Building2, Settings, Edit2, Trash2, History, TrendingUp, TrendingDown, CheckCircle2, Copy, Repeat, Divide, ArrowRight, Upload } from 'lucide-react';
 import { TransactionType, PaymentStatus, Transaction } from '../types';
 import { generateId, getTodayString, formatCurrency, formatDate } from '../utils';
+import { SINGLE_STORE_NAME } from '../constants';
 import BankImportModal from './BankImportModal';
 
 interface TransactionFormProps {
@@ -11,10 +12,10 @@ interface TransactionFormProps {
   onAddCategory: (type: TransactionType, category: string) => void;
   onRenameCategory: (type: TransactionType, oldName: string, newName: string) => void;
   onDeleteCategory: (type: TransactionType, name: string) => void;
-  units: string[];
-  onAddUnit: (unit: string) => void;
-  onRenameUnit: (oldName: string, newName: string) => void;
-  onDeleteUnit: (name: string) => void;
+  units: string[]; // Ignored now
+  onAddUnit: (unit: string) => void; // Ignored
+  onRenameUnit: (oldName: string, newName: string) => void; // Ignored
+  onDeleteUnit: (name: string) => void; // Ignored
   defaultUnit?: string;
   lastTransaction?: Transaction | null;
   existingTransactions: Transaction[];
@@ -29,11 +30,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   onAddCategory,
   onRenameCategory,
   onDeleteCategory,
-  units,
-  onAddUnit,
-  onRenameUnit,
-  onDeleteUnit,
-  defaultUnit,
   lastTransaction,
   existingTransactions
 }) => {
@@ -47,44 +43,32 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   // Automation States
   const [repeatMode, setRepeatMode] = useState<RepeatMode>('SINGLE');
   const [repeatCount, setRepeatCount] = useState(2);
-  const [unit, setUnit] = useState(defaultUnit || (units.length > 0 ? units[0] : ''));
-
-  // Update unit if defaultUnit changes or units load
-  useEffect(() => {
-    if (defaultUnit) {
-      setUnit(defaultUnit);
-    } else if (units.length > 0 && !unit) {
-      setUnit(units[0]);
-    }
-  }, [defaultUnit, units]);
+  
+  // Hardcoded Unit
+  const unit = SINGLE_STORE_NAME;
 
   // Modal State
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isCategoryManageOpen, setIsCategoryManageOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   
-  const [isUnitModalOpen, setIsUnitModalOpen] = useState(false);
-  const [isUnitManageOpen, setIsUnitManageOpen] = useState(false);
-  const [newUnitName, setNewUnitName] = useState('');
-
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Wrapper function to check duplicates before saving
   const handleTransactionSubmit = (newTxs: Transaction[]) => {
     // Check for duplicates
-    // We match: Date, Amount (roughly), Description (case insensitive), Type and Unit
+    // We match: Date, Amount (roughly), Description (case insensitive), Type
     const duplicates = newTxs.filter(newTx =>
       existingTransactions.some(existing =>
         existing.date === newTx.date &&
         Math.abs(existing.amount - newTx.amount) < 0.01 &&
         existing.description.trim().toLowerCase() === newTx.description.trim().toLowerCase() &&
-        existing.type === newTx.type &&
-        existing.unit === newTx.unit
+        existing.type === newTx.type
       )
     );
 
     if (duplicates.length > 0) {
-      const confirmMsg = `Atenção: Encontramos ${duplicates.length} lançamento(s) que parecem duplicados (mesma data, descrição, valor e unidade).\n\nEx: ${duplicates[0].description} - ${formatCurrency(duplicates[0].amount)}\n\nDeseja salvar mesmo assim?`;
+      const confirmMsg = `Atenção: Encontramos ${duplicates.length} lançamento(s) que parecem duplicados (mesma data, descrição e valor).\n\nEx: ${duplicates[0].description} - ${formatCurrency(duplicates[0].amount)}\n\nDeseja salvar mesmo assim?`;
       if (!window.confirm(confirmMsg)) {
         return; // User cancelled
       }
@@ -95,7 +79,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!description || !amount || !category || !date || !unit) return;
+    if (!description || !amount || !category || !date) return;
 
     const numAmount = parseFloat(amount.replace(',', '.'));
     const newTransactions: Transaction[] = [];
@@ -117,35 +101,25 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       const baseDate = new Date(date);
       const isInstallment = repeatMode === 'INSTALLMENT';
       
-      // LOGICA DE ARREDONDAMENTO (CORREÇÃO MATEMÁTICA)
+      // LOGICA DE ARREDONDAMENTO
       let installmentValue = numAmount;
       let firstInstallmentDiff = 0;
 
       if (isInstallment) {
-        // Calcula o valor base truncado para 2 casas
         installmentValue = Math.floor((numAmount / repeatCount) * 100) / 100;
-        // Calcula a diferença de centavos que sobrou
         const totalCalculated = installmentValue * repeatCount;
         firstInstallmentDiff = numAmount - totalCalculated;
-        // Arredonda a diferença para evitar erros de ponto flutuante (ex: 0.009999999)
         firstInstallmentDiff = Math.round(firstInstallmentDiff * 100) / 100;
       }
 
       for (let i = 0; i < repeatCount; i++) {
-        // Clone date safely
         const installmentDate = new Date(baseDate.getTime());
-        // Handle month increment carefully to avoid timezone skips
-        // Set the day to 1st to avoid month overflow (e.g. Jan 31 -> Feb 28), 
-        // but here we likely want to keep the day if possible. 
-        // Simple approach: Add month to the date object.
         installmentDate.setMonth(baseDate.getMonth() + i);
         
-        // Adjust description based on mode
         let descSuffix = '';
         if (isInstallment) descSuffix = `(Parc. ${i + 1}/${repeatCount})`;
         else descSuffix = `(Mês ${i + 1}/${repeatCount})`;
 
-        // Add the penny difference to the FIRST installment only
         let currentAmount = installmentValue;
         if (isInstallment && i === 0) {
             currentAmount += firstInstallmentDiff;
@@ -158,7 +132,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           type,
           category,
           date: installmentDate.toISOString().split('T')[0],
-          // First one takes current status, others usually pending (unless user wants all paid)
           status: i === 0 ? status : PaymentStatus.PENDING,
           installments: isInstallment ? { current: i + 1, total: repeatCount } : undefined,
           unit,
@@ -166,7 +139,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       }
     }
 
-    // Call the wrapper instead of direct prop
     handleTransactionSubmit(newTransactions);
     
     // Reset form partially
@@ -182,9 +154,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     setDescription(lastTransaction.description);
     setAmount(lastTransaction.amount.toString());
     setCategory(lastTransaction.category);
-    setUnit(lastTransaction.unit || unit);
-    // Keep current date or set to last date? Usually keep 'today' for new entry is better flow
-    // setDate(lastTransaction.date); 
+    // Unit is fixed
     setStatus(lastTransaction.status);
   };
 
@@ -195,16 +165,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       setCategory(newCategoryName.trim());
       setNewCategoryName('');
       setIsCategoryModalOpen(false);
-    }
-  };
-
-  const handleSaveNewUnit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newUnitName.trim()) {
-      onAddUnit(newUnitName.trim());
-      setUnit(newUnitName.trim());
-      setNewUnitName('');
-      setIsUnitModalOpen(false);
     }
   };
 
@@ -226,7 +186,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             className="bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-all border border-white/20"
           >
             <Upload size={14} />
-            Importar Extrato (XML)
+            Importar XML
           </button>
 
           <div className="flex bg-black/20 rounded-lg p-1">
@@ -349,38 +309,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           </select>
         </div>
 
-        {/* Unit */}
+        {/* Unit Display (Read Only) */}
         <div>
           <label className="block text-gray-400 text-sm font-bold mb-2 flex items-center gap-2">
-            <Building2 size={16} /> Unidade
+            <Building2 size={16} /> Loja / Unidade
           </label>
-          <div className="flex gap-2">
-            <select
-              required
-              value={unit}
-              onChange={(e) => setUnit(e.target.value)}
-              className="w-full bg-gray-900 text-white border border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:border-blue-500"
-            >
-              {units.map((u) => (
-                <option key={u} value={u}>{u}</option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => setIsUnitModalOpen(true)}
-              className="bg-gray-700 hover:bg-gray-600 text-white border border-gray-600 rounded-md px-3 flex items-center justify-center transition-colors"
-              title="Nova Unidade"
-            >
-              <Plus size={20} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsUnitManageOpen(true)}
-              className="bg-gray-700 hover:bg-gray-600 text-white border border-gray-600 rounded-md px-3 flex items-center justify-center transition-colors"
-              title="Gerenciar Unidades"
-            >
-              <Settings size={20} />
-            </button>
+          <div className="w-full bg-gray-900/50 text-gray-300 border border-gray-700 rounded-md py-2 px-3 cursor-not-allowed italic">
+             {SINGLE_STORE_NAME}
           </div>
         </div>
 
@@ -511,7 +446,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         onImport={handleTransactionSubmit}
         incomeCategories={incomeCategories}
         expenseCategories={expenseCategories}
-        units={units}
+        units={[unit]}
       />
 
       {/* Add Category Modal */}
@@ -533,28 +468,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           onClose={() => setIsCategoryManageOpen(false)}
           onRename={(oldName, newName) => onRenameCategory(type, oldName, newName)}
           onDelete={(name) => onDeleteCategory(type, name)}
-        />
-      )}
-
-      {/* Add Unit Modal */}
-      {isUnitModalOpen && (
-        <SimpleInputModal 
-           title="Nova Unidade / Loja"
-           value={newUnitName}
-           onChange={setNewUnitName}
-           onClose={() => setIsUnitModalOpen(false)}
-           onSubmit={handleSaveNewUnit}
-        />
-      )}
-
-      {/* Manage Units Modal */}
-      {isUnitManageOpen && (
-        <ManageItemsModal 
-          title="Gerenciar Unidades"
-          items={units}
-          onClose={() => setIsUnitManageOpen(false)}
-          onRename={onRenameUnit}
-          onDelete={onDeleteUnit}
         />
       )}
 

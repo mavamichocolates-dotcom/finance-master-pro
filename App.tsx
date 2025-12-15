@@ -11,7 +11,7 @@ import Login from './components/Login';
 import UserManagement from './components/UserManagement';
 import { formatCurrency, formatDate } from './utils';
 import { LayoutDashboard, Wallet, Receipt, TrendingUp, TrendingDown, DollarSign, Building2, LogOut, Shield, User as UserIcon, Loader2, HardDrive, Cloud, CloudOff, Database, Copy, CheckCircle2, History, ArrowRight, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
-import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, MONTH_NAMES } from './constants';
+import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, MONTH_NAMES, SINGLE_STORE_NAME } from './constants';
 import { isSupabaseConfigured } from './src/supabase';
 
 // Tabs Enum
@@ -96,9 +96,7 @@ EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 -- 5. DADOS INICIAIS
 INSERT INTO stores (name) VALUES 
-('Mavami Cookies Osasco'),
-('Mavami Cookies SP'),
-('Matriz')
+('Mirella Doces')
 ON CONFLICT (name) DO NOTHING;
 `;
 
@@ -126,10 +124,9 @@ const App: React.FC = () => {
     };
   });
 
-  const [units, setUnits] = useState<string[]>([]);
+  // Single unit logic
+  const units = [SINGLE_STORE_NAME];
   
-  // Global Filters
-  const [selectedUnit, setSelectedUnit] = useState<string>('ALL');
   const [currentDate, setCurrentDate] = useState(new Date());
 
   // Confirmation Modal State
@@ -155,14 +152,11 @@ const App: React.FC = () => {
         
         if (user) {
           setIsLoading(true);
-          // Now fetches from LocalStorage OR Supabase automatically
-          const [txs, dbUnits] = await Promise.all([
+          const [txs] = await Promise.all([
             db.getTransactions(),
-            db.getUnits(),
             db.getUsers()
           ]);
           setTransactions(txs);
-          setUnits(dbUnits);
           
           if (isSupabaseConfigured) {
              setShowConnectionSuccess(true);
@@ -202,13 +196,11 @@ const App: React.FC = () => {
     
     setIsLoading(true);
     try {
-      const [txs, dbUnits] = await Promise.all([
+      const [txs] = await Promise.all([
         db.getTransactions(),
-        db.getUnits(),
         db.getUsers()
       ]);
       setTransactions(txs);
-      setUnits(dbUnits);
       
       if (isSupabaseConfigured) {
          setShowConnectionSuccess(true);
@@ -250,8 +242,6 @@ const App: React.FC = () => {
       
       // AUTO-SWITCH to the month of the added data
       if (savedTxs.length > 0) {
-        // Find the most frequent month in the new batch to switch to, or just the first one
-        // Using the first one is simpler and usually correct for imports
         const firstDate = new Date(savedTxs[0].date + 'T12:00:00');
         if (!isNaN(firstDate.getTime())) {
           setCurrentDate(firstDate);
@@ -266,10 +256,10 @@ const App: React.FC = () => {
       if (errString.includes("Failed to fetch")) {
          msg = "ERRO DE CONEXÃO:\nNão foi possível contatar o banco de dados. Verifique sua internet.";
       }
-      else if (error?.code === '23503') { // Foreign Key Violation
-         msg = "Erro: A unidade/loja selecionada não existe no banco de dados. Tente recarregar a página.";
+      else if (error?.code === '23503') { 
+         msg = "Erro: A loja 'Mirella Doces' não foi encontrada no banco. Recarregue a página.";
       } 
-      else if (error?.code === '42501') { // RLS Violation
+      else if (error?.code === '42501') { 
          msg = "Erro de Permissão (RLS): O banco de dados recusou a gravação. Contate o administrador.";
       }
       else if (error?.message) {
@@ -331,7 +321,7 @@ const App: React.FC = () => {
     }
   };
 
-  // --- Categories & Units ---
+  // --- Categories ---
 
   const handleAddCategory = (type: TransactionType, name: string) => {
     setCategories(prev => ({
@@ -370,42 +360,6 @@ const App: React.FC = () => {
     );
   };
 
-  const handleAddUnit = async (name: string) => {
-    if (!units.includes(name)) {
-      setIsLoading(true);
-      try {
-        await db.addUnit(name);
-        setUnits(prev => [...prev, name]);
-      } catch (e) {
-        alert("Erro ao criar unidade.");
-      } finally {
-        setIsLoading(false);
-      }
-    }
-  };
-
-  const handleRenameUnit = (oldName: string, newName: string) => {
-    setUnits(prev => prev.map(u => u === oldName ? newName : u));
-  };
-
-  const handleDeleteUnit = (name: string) => {
-    openConfirm(
-      'Excluir Unidade',
-      `Deseja remover a unidade "${name}"?`,
-      async () => {
-        setIsLoading(true);
-        try {
-          await db.deleteUnit(name);
-          setUnits(prev => prev.filter(u => u !== name));
-        } catch (e) {
-          alert("Erro ao excluir unidade.");
-        } finally {
-          setIsLoading(false);
-        }
-      }
-    );
-  };
-
   const openConfirm = (title: string, message: string, action: () => void) => {
     setConfirmModal({ isOpen: true, title, message, onConfirm: action });
   };
@@ -415,21 +369,12 @@ const App: React.FC = () => {
 
   // --- RENDERING HELPERS ---
 
-  const availableUnits = currentUser?.role === 'ADMIN' 
-    ? units 
-    : units.filter(u => currentUser?.allowedUnits?.includes(u));
-
-  const filteredTransactions = transactions.filter(t => {
-    if (!auth.canAccessUnit(currentUser!, t.unit || '')) return false;
-    if (selectedUnit === 'ALL') return true;
-    return t.unit === selectedUnit;
-  });
-
   const selectedMonthIndex = currentDate.getMonth();
   const selectedYear = currentDate.getFullYear();
   const selectedMonthName = MONTH_NAMES[selectedMonthIndex];
 
-  const currentMonthTxs = filteredTransactions.filter(t => {
+  // Simply filter by date, ignore unit filters since there is only one
+  const currentMonthTxs = transactions.filter(t => {
     const d = new Date(t.date + 'T12:00:00');
     return d.getMonth() === selectedMonthIndex && d.getFullYear() === selectedYear;
   });
@@ -453,8 +398,6 @@ const App: React.FC = () => {
   if (!authChecked) return null;
 
   if (!isDatabaseReady && currentUser) {
-    // ... Database Setup Screen (unchanged logic) ...
-    // (Shortened for brevity as it was provided in context, retaining logic conceptually)
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
         {/* ... setup screen content ... */}
@@ -518,6 +461,8 @@ const App: React.FC = () => {
                   ) : (
                     <span className="flex items-center gap-1 text-orange-500 font-bold" title="Dados salvos localmente"><HardDrive size={12} /> Local</span>
                   )}
+                  <span className="mx-1 text-gray-700">|</span>
+                  <span className="text-blue-400 font-bold">{SINGLE_STORE_NAME}</span>
                 </div>
               </div>
             </div>
@@ -531,21 +476,6 @@ const App: React.FC = () => {
                     <span className="capitalize">{selectedMonthName} {selectedYear}</span>
                  </div>
                  <button onClick={() => handleMonthChange(1)} className="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded"><ChevronRight size={16} /></button>
-              </div>
-
-              {/* Unit Selector */}
-              <div className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5">
-                  <Building2 size={16} className="text-gray-400" />
-                  <select 
-                    value={selectedUnit}
-                    onChange={(e) => setSelectedUnit(e.target.value)}
-                    className="bg-transparent text-sm text-white focus:outline-none min-w-[120px]"
-                  >
-                    <option value="ALL">Todas as Unidades</option>
-                    {availableUnits.map(u => (
-                      <option key={u} value={u}>{u}</option>
-                    ))}
-                  </select>
               </div>
 
               {/* Navigation */}
@@ -620,11 +550,10 @@ const App: React.FC = () => {
                 onAddCategory={handleAddCategory}
                 onRenameCategory={handleRenameCategory}
                 onDeleteCategory={handleDeleteCategory}
-                units={availableUnits}
-                onAddUnit={handleAddUnit}
-                onRenameUnit={handleRenameUnit}
-                onDeleteUnit={handleDeleteUnit}
-                defaultUnit={selectedUnit !== 'ALL' ? selectedUnit : availableUnits[0]}
+                units={units}
+                onAddUnit={() => {}} // No-op
+                onRenameUnit={() => {}} // No-op
+                onDeleteUnit={() => {}} // No-op
                 lastTransaction={lastTransaction}
                 existingTransactions={transactions}
               />
@@ -637,11 +566,11 @@ const App: React.FC = () => {
           {activeTab === ActiveTab.MANAGEMENT && (
             <div className="animate-fade-in-up">
                <TransactionTable 
-                  transactions={filteredTransactions} 
+                  transactions={transactions} 
                   onDelete={handleDeleteTransaction}
                   onDeleteMany={handleDeleteTransactions}
                   onUpdate={handleUpdateTransaction}
-                  units={availableUnits}
+                  units={units}
                />
             </div>
           )}
@@ -649,8 +578,8 @@ const App: React.FC = () => {
           {activeTab === ActiveTab.DASHBOARD && (
             <div className="animate-fade-in-up">
               <Dashboard 
-                transactions={transactions.filter(t => auth.canAccessUnit(currentUser, t.unit || ''))} 
-                units={availableUnits} 
+                transactions={transactions} 
+                units={units} 
               />
             </div>
           )}
