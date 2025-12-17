@@ -1,6 +1,8 @@
+
 import { TransactionType } from './types';
 
 export const EXPENSE_CATEGORIES = [
+  'Frete',
   'Compras de Equipamentos',
   'Kinder Bueno',
   'Nutella',

@@ -14,7 +14,6 @@ class AIService {
     const saved = localStorage.getItem('fm_ai_config');
     if (saved) return JSON.parse(saved);
     
-    // Fallback para variáveis de ambiente se não houver config manual
     return {
       provider: 'gemini',
       apiKey: process.env.API_KEY || '',
@@ -28,8 +27,16 @@ class AIService {
   }
 
   /**
-   * Chamada para OpenAI via Fetch API padrão
+   * Regras fixas de negócio que precedem a IA
    */
+  private applyLocalRules(description: string): string | null {
+    const desc = description.toLowerCase();
+    if (desc.includes('uber') || desc.includes('lalamove')) {
+      return 'Frete';
+    }
+    return null;
+  }
+
   private async callOpenAI(prompt: string, model: string, apiKey: string, isJson: boolean = false) {
     if (!apiKey) throw new Error("API_KEY_MISSING");
     
@@ -57,13 +64,17 @@ class AIService {
   }
 
   async suggestCategory(description: string, type: 'INCOME' | 'EXPENSE', categories: string[]): Promise<string> {
+    // 1. Verificar Regras Locais primeiro
+    const localMatch = this.applyLocalRules(description);
+    if (localMatch && categories.includes(localMatch)) return localMatch;
+
     const config = this.getConfig();
     const prompt = `
       Você é um assistente financeiro para a Mirella Doces.
       Descrição: "${description}"
       Tipo: ${type === 'INCOME' ? 'Entrada' : 'Saída'}
       Categorias Permitidas: ${JSON.stringify(categories)}
-      Responda APENAS com o nome da categoria exata. Se não souber, responda "Outros".
+      Responda APENAS com o nome da categoria exata da lista. Se não souber ou for ambíguo, responda "Outros".
     `;
 
     try {
@@ -88,13 +99,27 @@ class AIService {
   }
 
   async classifyBulk(items: { description: string, type: string }[], allCategories: string[]) {
+    // Aplicar regras locais antes de enviar para a IA
+    const processedItems = items.map(item => {
+      const ruleMatch = this.applyLocalRules(item.description);
+      return { ...item, localMatch: ruleMatch };
+    });
+
+    const itemsForAi = processedItems.filter(i => !i.localMatch);
+    const results = processedItems.filter(i => i.localMatch).map(i => ({
+      description: i.description,
+      category: i.localMatch
+    }));
+
+    if (itemsForAi.length === 0) return results;
+
     const config = this.getConfig();
     const prompt = `
       Classifique as transações para uma doceria.
       Categorias: ${JSON.stringify(allCategories)}
-      Transações: ${JSON.stringify(items)}
+      Transações: ${JSON.stringify(itemsForAi)}
       Retorne um JSON: [{"description": "...", "category": "..."}]. 
-      Use apenas categorias da lista.
+      Use APENAS categorias da lista fornecida. Se não tiver certeza, use "Outros".
     `;
 
     try {
@@ -123,10 +148,12 @@ class AIService {
         });
         jsonStr = response.text || "[]";
       }
-      return JSON.parse(jsonStr);
+      
+      const aiResults = JSON.parse(jsonStr);
+      return [...results, ...aiResults];
     } catch (error) {
       console.error("Erro na classificação em massa:", error);
-      throw error;
+      return results; // Retorna pelo menos o que as regras locais pegaram
     }
   }
 }
