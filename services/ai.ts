@@ -1,11 +1,14 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 
 class AIService {
+  /**
+   * Always creates a new instance to ensure it uses the latest API key 
+   * selected by the user in the AI Studio dialog.
+   */
   private getClient() {
     const apiKey = process.env.API_KEY;
     if (!apiKey) {
-      console.error("ERRO CRÍTICO: Chave de API (process.env.API_KEY) não encontrada. Verifique as configurações de ambiente.");
+      console.error("ERRO CRÍTICO: Chave de API (process.env.API_KEY) não encontrada. Use o seletor no topo da tela.");
       throw new Error("API_KEY_MISSING");
     }
     return new GoogleGenAI({ apiKey });
@@ -44,6 +47,13 @@ class AIService {
     } catch (error: any) {
       console.error("Erro detalhado na sugestão de IA:", error);
       if (error.message === "API_KEY_MISSING") throw error;
+      
+      // If requested entity not found, it might be a wrong project key, trigger reset hint
+      if (error.message?.includes("Requested entity was not found")) {
+        console.warn("Chave de API inválida ou projeto não encontrado.");
+        throw new Error("INVALID_KEY_PROJECT");
+      }
+      
       return "Outros";
     }
   }
