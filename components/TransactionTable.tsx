@@ -75,7 +75,15 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   };
 
   const toggleReviewStatus = (t: Transaction) => {
-     onUpdate({ ...t, reviewed: !t.reviewed });
+     const nextReviewedState = !t.reviewed;
+     
+     // Se estamos marcando como REVISADO agora, e a categoria não é 'Outros', 
+     // reforçamos o aprendizado da IA para este padrão de descrição.
+     if (nextReviewedState && t.category !== 'Outros') {
+       aiService.learn(t.description, t.category);
+     }
+     
+     onUpdate({ ...t, reviewed: nextReviewedState });
   };
 
   const handleExportCSV = () => {
@@ -109,6 +117,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
             <button 
               onClick={() => setShowOnlyPending(!showOnlyPending)}
               className={`flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold uppercase transition-all border ${showOnlyPending ? 'bg-orange-500/20 border-orange-500 text-orange-400' : 'bg-gray-800 border-gray-600 text-gray-500 hover:text-white'}`}
+              title={showOnlyPending ? "Ver todos os lançamentos" : "Ver apenas o que ainda não foi revisado"}
             >
               {showOnlyPending ? <Eye size={12} /> : <EyeOff size={12} />}
               {showOnlyPending ? 'Mostrando Apenas Pendentes' : 'Filtrar Pendentes'}
@@ -167,7 +176,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
           </thead>
           <tbody>
             {filteredTransactions.map((t) => (
-              <tr key={t.id} className={`border-b border-gray-700 transition-colors group ${selectedIds.has(t.id) ? 'bg-blue-900/20' : 'hover:bg-gray-700/50'} ${(!t.reviewed || t.category === 'Outros') ? 'bg-orange-950/5' : ''}`}>
+              <tr key={t.id} className={`border-b border-gray-700 transition-all duration-200 group ${selectedIds.has(t.id) ? 'bg-blue-900/20' : 'hover:bg-gray-700/50'} ${(!t.reviewed || t.category === 'Outros') ? 'bg-orange-950/5' : ''}`}>
                 <td className="px-4 py-3 text-center">
                   <input type="checkbox" className="w-4 h-4 rounded border-gray-600 text-blue-600 bg-gray-800" checked={selectedIds.has(t.id)} onChange={() => handleSelectOne(t.id)} />
                 </td>
@@ -178,7 +187,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                     <select
                       value={t.category}
                       onChange={(e) => handleQuickCategoryChange(t, e.target.value)}
-                      className={`bg-gray-900/50 border border-gray-700 text-gray-300 py-1 px-2 rounded text-xs focus:border-blue-500 outline-none w-full max-w-[150px] cursor-pointer transition-colors ${t.reviewed ? 'border-green-900/50 text-green-300' : 'border-orange-900/50 text-orange-300'}`}
+                      className={`bg-gray-900/50 border border-gray-700 text-gray-300 py-1 px-2 rounded text-xs focus:border-blue-500 outline-none w-full max-w-[150px] cursor-pointer transition-colors ${t.reviewed && t.category !== 'Outros' ? 'border-green-900/50 text-green-300' : 'border-orange-900/50 text-orange-300'}`}
                     >
                       {(t.type === TransactionType.INCOME ? incomeCategories : expenseCategories).map(cat => (
                         <option key={cat} value={cat}>{cat}</option>
@@ -202,9 +211,10 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                 <td className="px-4 py-3 text-center">
                   <button 
                     onClick={() => toggleReviewStatus(t)}
-                    className={`flex items-center gap-2 mx-auto px-3 py-1 rounded-full text-[10px] font-bold uppercase transition-all ${t.reviewed && t.category !== 'Outros' ? 'bg-green-900/20 text-green-400 border border-green-900' : 'bg-orange-900/20 text-orange-400 border border-orange-900'}`}
+                    className={`flex items-center gap-2 mx-auto px-3 py-1.5 rounded-full text-[10px] font-bold uppercase transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-sm border ${t.reviewed && t.category !== 'Outros' ? 'bg-green-600/20 text-green-400 border-green-600/50 hover:bg-green-600/30' : 'bg-orange-600/20 text-orange-400 border-orange-600/50 hover:bg-orange-600/30'}`}
+                    title={t.reviewed ? "Clique para marcar como Pendente" : "Clique para marcar como Revisado e ensinar a IA"}
                   >
-                    {t.reviewed && t.category !== 'Outros' ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
+                    {t.reviewed && t.category !== 'Outros' ? <CheckCircle size={14} className="animate-pulse" /> : <AlertCircle size={14} />}
                     {t.reviewed && t.category !== 'Outros' ? 'Revisado' : 'Pendente'}
                   </button>
                 </td>
@@ -219,9 +229,9 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
       <div className="p-3 bg-gray-950/50 border-t border-gray-700 flex items-center justify-between text-[10px] text-gray-500 uppercase tracking-widest font-bold">
         <div className="flex items-center gap-2">
           <Sparkles size={12} className="text-purple-400" />
-          <span>A IA aprende instantaneamente com cada ajuste manual seu.</span>
+          <span>{showOnlyPending ? "Limpando fila de pendências..." : "Clique nos selos de status para validar lançamentos."}</span>
         </div>
-        <span>Total: {filteredTransactions.length} registros</span>
+        <span>Total exibido: {filteredTransactions.length} registros</span>
       </div>
     </div>
   );
