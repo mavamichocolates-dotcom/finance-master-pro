@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Transaction, TransactionType, PaymentStatus } from '../types';
 import { formatCurrency, formatDate } from '../utils';
-import { Trash2, Edit, Search, Download, Calendar, FilterX, CheckSquare, Square } from 'lucide-react';
+import { Trash2, Edit, Search, Download, Calendar, FilterX, List as ListIcon } from 'lucide-react';
 
 interface TransactionTableProps {
   transactions: Transaction[];
@@ -9,9 +9,19 @@ interface TransactionTableProps {
   onDeleteMany: (ids: string[]) => void;
   onUpdate: (updated: Transaction) => void;
   units: string[];
+  incomeCategories: string[];
+  expenseCategories: string[];
 }
 
-const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDelete, onDeleteMany, onUpdate, units }) => {
+const TransactionTable: React.FC<TransactionTableProps> = ({ 
+  transactions, 
+  onDelete, 
+  onDeleteMany, 
+  onUpdate, 
+  units,
+  incomeCategories,
+  expenseCategories
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'ALL' | TransactionType>('ALL');
   
@@ -25,29 +35,21 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDel
   // Selection State
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Reset selection when filters change (to avoid deleting hidden items accidentally)
+  // Reset selection when filters change
   useEffect(() => {
     setSelectedIds(new Set());
   }, [searchTerm, filterType, startDate, endDate]);
 
   // --- FILTER LOGIC ---
   const filteredTransactions = transactions.filter((t) => {
-    // 1. Text Search
     const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          t.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (t.unit || '').toLowerCase().includes(searchTerm.toLowerCase());
+                          t.category.toLowerCase().includes(searchTerm.toLowerCase());
     
-    // 2. Type Filter
     const matchesType = filterType === 'ALL' || t.type === filterType;
 
-    // 3. Date Range Filter
     let matchesDate = true;
-    if (startDate) {
-      matchesDate = matchesDate && t.date >= startDate;
-    }
-    if (endDate) {
-      matchesDate = matchesDate && t.date <= endDate;
-    }
+    if (startDate) matchesDate = matchesDate && t.date >= startDate;
+    if (endDate) matchesDate = matchesDate && t.date <= endDate;
 
     return matchesSearch && matchesType && matchesDate;
   }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -55,7 +57,6 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDel
   // --- SELECTION LOGIC ---
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
-      // Select all visible transactions
       const allIds = new Set(filteredTransactions.map(t => t.id));
       setSelectedIds(allIds);
     } else {
@@ -65,11 +66,8 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDel
 
   const handleSelectOne = (id: string) => {
     const newSet = new Set(selectedIds);
-    if (newSet.has(id)) {
-      newSet.delete(id);
-    } else {
-      newSet.add(id);
-    }
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
     setSelectedIds(newSet);
   };
 
@@ -83,40 +81,31 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDel
     }
   };
 
+  // --- QUICK UPDATE HANDLERS ---
+  const handleQuickCategoryChange = (t: Transaction, newCategory: string) => {
+    onUpdate({ ...t, category: newCategory });
+  };
+
+  const handleQuickStatusChange = (t: Transaction, newStatus: PaymentStatus) => {
+    onUpdate({ ...t, status: newStatus });
+  };
+
   // --- EXPORT LOGIC ---
   const handleExportCSV = () => {
-    if (filteredTransactions.length === 0) {
-      alert("Não há dados para exportar com os filtros atuais.");
-      return;
-    }
-
-    // Define Headers
-    const headers = ["ID", "Data", "Tipo", "Categoria", "Descrição", "Valor", "Status", "Unidade", "Parcela"];
-    
-    // Map Data
+    if (filteredTransactions.length === 0) return;
+    const headers = ["ID", "Data", "Tipo", "Categoria", "Descrição", "Valor", "Status", "Unidade"];
     const csvContent = [
       headers.join(","),
-      ...filteredTransactions.map(t => {
-        return [
-          t.id,
-          t.date,
-          t.type,
-          `"${t.category}"`, // Quote strings to handle commas
-          `"${t.description}"`,
-          t.amount.toFixed(2),
-          t.status,
-          `"${t.unit || ''}"`,
-          t.installments ? `${t.installments.current}/${t.installments.total}` : '1/1'
-        ].join(",");
-      })
+      ...filteredTransactions.map(t => [
+        t.id, t.date, t.type, `"${t.category}"`, `"${t.description}"`, t.amount.toFixed(2), t.status, `"${t.unit || ''}"`
+      ].join(","))
     ].join("\n");
 
-    // Create Download Link with BOM (\uFEFF) for Excel compatibility
     const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `lancamentos_financemaster_${new Date().toISOString().split('T')[0]}.csv`);
+    link.href = url;
+    link.download = `financeiro_mirella_${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -129,22 +118,9 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDel
     setEndDate('');
   };
 
-  // --- EDIT HANDLERS ---
   const startEditing = (t: Transaction) => {
     setEditingId(t.id);
     setEditForm({ ...t });
-  };
-
-  const cancelEditing = () => {
-    setEditingId(null);
-    setEditForm({});
-  };
-
-  const saveEdit = () => {
-    if (editForm.id && editForm.description && editForm.amount) {
-      onUpdate(editForm as Transaction);
-      setEditingId(null);
-    }
   };
 
   return (
@@ -153,97 +129,51 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDel
       <div className="p-4 border-b border-gray-700 flex flex-col gap-4 bg-gray-900 rounded-t-lg">
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <ListIcon className="text-blue-500" />
+            <ListIcon className="text-blue-500" size={24} />
             Gerenciamento de Lançamentos
           </h2>
           
           <div className="flex gap-2">
             {selectedIds.size > 0 && (
-              <button
-                onClick={handleBulkDelete}
-                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-lg animate-fade-in-up"
-              >
-                <Trash2 size={16} />
-                Excluir ({selectedIds.size})
+              <button onClick={handleBulkDelete} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-lg">
+                <Trash2 size={16} /> Excluir ({selectedIds.size})
               </button>
             )}
-            <button
-              onClick={handleExportCSV}
-              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-lg"
-              title="Baixar CSV para Excel"
-            >
-              <Download size={16} />
-              Exportar CSV
+            <button onClick={handleExportCSV} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-lg">
+              <Download size={16} /> Exportar CSV
             </button>
           </div>
         </div>
         
         {/* Filters Bar */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center bg-gray-800 p-2 rounded-lg border border-gray-700">
-          
-          {/* Search */}
           <div className="md:col-span-4 relative">
             <Search className="absolute left-3 top-2.5 text-gray-500" size={16} />
             <input
               type="text"
-              placeholder="Buscar descrição, categoria..."
+              placeholder="Buscar descrição ou categoria..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-9 pr-4 py-2 bg-gray-900 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500 w-full text-sm"
             />
           </div>
           
-          {/* Dates */}
           <div className="md:col-span-4 flex gap-2 items-center">
-             <div className="relative w-full">
-                <span className="absolute left-2 top-2 text-gray-500 pointer-events-none">
-                  <Calendar size={14} />
-                </span>
-                <input 
-                  type="date" 
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full bg-gray-900 text-gray-300 border border-gray-600 rounded-lg py-2 pl-8 pr-2 text-xs focus:border-blue-500"
-                  title="Data Inicial"
-                />
-             </div>
+             <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full bg-gray-900 text-gray-300 border border-gray-600 rounded-lg py-2 px-2 text-xs focus:border-blue-500" />
              <span className="text-gray-500">-</span>
-             <div className="relative w-full">
-                <span className="absolute left-2 top-2 text-gray-500 pointer-events-none">
-                  <Calendar size={14} />
-                </span>
-                <input 
-                  type="date" 
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full bg-gray-900 text-gray-300 border border-gray-600 rounded-lg py-2 pl-8 pr-2 text-xs focus:border-blue-500"
-                  title="Data Final"
-                />
-             </div>
+             <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full bg-gray-900 text-gray-300 border border-gray-600 rounded-lg py-2 px-2 text-xs focus:border-blue-500" />
           </div>
 
-          {/* Type Selector */}
           <div className="md:col-span-3">
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value as any)}
-              className="w-full bg-gray-900 text-white border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-            >
+            <select value={filterType} onChange={(e) => setFilterType(e.target.value as any)} className="w-full bg-gray-900 text-white border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500">
               <option value="ALL">Todos os Tipos</option>
-              <option value={TransactionType.INCOME}>Apenas Entradas</option>
-              <option value={TransactionType.EXPENSE}>Apenas Saídas</option>
+              <option value={TransactionType.INCOME}>Entradas</option>
+              <option value={TransactionType.EXPENSE}>Saídas</option>
             </select>
           </div>
 
-          {/* Clear Filters */}
           <div className="md:col-span-1 flex justify-center">
-             <button 
-               onClick={clearFilters}
-               className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors"
-               title="Limpar Filtros"
-             >
-               <FilterX size={18} />
-             </button>
+             <button onClick={clearFilters} className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full" title="Limpar Filtros"><FilterX size={18} /></button>
           </div>
         </div>
       </div>
@@ -254,168 +184,69 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDel
           <thead className="text-xs text-gray-400 uppercase bg-gray-950 sticky top-0 z-10 shadow-md">
             <tr>
               <th className="px-4 py-3 text-center w-12">
-                <input 
-                  type="checkbox" 
-                  className="w-4 h-4 rounded border-gray-600 text-blue-600 bg-gray-800 focus:ring-blue-500 cursor-pointer"
-                  checked={isAllSelected}
-                  ref={input => {
-                    if (input) input.indeterminate = isIndeterminate;
-                  }}
-                  onChange={handleSelectAll}
-                />
+                <input type="checkbox" className="w-4 h-4 rounded border-gray-600 text-blue-600 bg-gray-800" checked={isAllSelected} onChange={handleSelectAll} />
               </th>
               <th className="px-4 py-3">Data</th>
               <th className="px-4 py-3">Descrição</th>
               <th className="px-4 py-3">Categoria</th>
-              <th className="px-4 py-3">Unidade</th>
               <th className="px-4 py-3">Valor</th>
               <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Parc.</th>
               <th className="px-4 py-3 text-center">Ações</th>
             </tr>
           </thead>
           <tbody>
             {filteredTransactions.length === 0 ? (
               <tr>
-                <td colSpan={9} className="text-center py-12 text-gray-500 flex flex-col items-center justify-center w-full absolute mt-10">
-                  <Search size={48} className="mb-4 opacity-20" />
-                  <p>Nenhum lançamento encontrado para os filtros selecionados.</p>
-                </td>
+                <td colSpan={7} className="text-center py-12 text-gray-500">Nenhum lançamento encontrado.</td>
               </tr>
             ) : (
               filteredTransactions.map((t) => (
-                <tr key={t.id} className={`border-b border-gray-700 transition-colors group ${selectedIds.has(t.id) ? 'bg-blue-900/20 hover:bg-blue-900/30' : 'hover:bg-gray-700/50'}`}>
+                <tr key={t.id} className={`border-b border-gray-700 transition-colors group ${selectedIds.has(t.id) ? 'bg-blue-900/20' : 'hover:bg-gray-700/50'}`}>
+                  <td className="px-4 py-3 text-center">
+                    <input type="checkbox" className="w-4 h-4 rounded border-gray-600 text-blue-600 bg-gray-800" checked={selectedIds.has(t.id)} onChange={() => handleSelectOne(t.id)} />
+                  </td>
+                  <td className="px-4 py-3 font-medium whitespace-nowrap text-white">{formatDate(t.date)}</td>
+                  <td className="px-4 py-3 truncate max-w-[200px]" title={t.description}>{t.description}</td>
                   
-                  {/* CHECKBOX COLUMN */}
-                  <td className="px-4 py-3 text-center align-middle">
-                    <input 
-                      type="checkbox" 
-                      className="w-4 h-4 rounded border-gray-600 text-blue-600 bg-gray-800 focus:ring-blue-500 cursor-pointer"
-                      checked={selectedIds.has(t.id)}
-                      onChange={() => handleSelectOne(t.id)}
-                    />
+                  {/* CATEGORY SELECTOR COLUMN */}
+                  <td className="px-4 py-3">
+                    <select
+                      value={t.category}
+                      onChange={(e) => handleQuickCategoryChange(t, e.target.value)}
+                      className="bg-gray-900/50 border border-gray-700 text-gray-300 py-1 px-2 rounded text-xs focus:border-blue-500 outline-none w-full max-w-[150px] cursor-pointer hover:bg-gray-900 transition-colors"
+                    >
+                      {(t.type === TransactionType.INCOME ? incomeCategories : expenseCategories).map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
                   </td>
 
-                  {editingId === t.id ? (
-                    // EDIT MODE
-                    <>
-                      <td className="px-4 py-3 align-top">
-                         <input 
-                           type="date" 
-                           value={editForm.date} 
-                           onChange={(e) => setEditForm({...editForm, date: e.target.value})}
-                           className="bg-gray-900 border border-blue-500 rounded px-2 py-1 text-white w-28 text-xs"
-                         />
-                      </td>
-                      <td className="px-4 py-3 align-top">
-                        <input 
-                           type="text" 
-                           value={editForm.description} 
-                           onChange={(e) => setEditForm({...editForm, description: e.target.value})}
-                           className="bg-gray-900 border border-blue-500 rounded px-2 py-1 text-white w-full text-xs"
-                         />
-                      </td>
-                      <td className="px-4 py-3 align-top">
-                         <input 
-                           type="text" 
-                           value={editForm.category} 
-                           onChange={(e) => setEditForm({...editForm, category: e.target.value})}
-                           className="bg-gray-900 border border-blue-500 rounded px-2 py-1 text-white w-28 text-xs"
-                         />
-                      </td>
-                      <td className="px-4 py-3 align-top">
-                         <select
-                           value={editForm.unit}
-                           onChange={(e) => setEditForm({...editForm, unit: e.target.value})}
-                           className="bg-gray-900 border border-blue-500 rounded px-2 py-1 text-white w-28 text-xs"
-                         >
-                            {units.map(u => (
-                              <option key={u} value={u}>{u}</option>
-                            ))}
-                         </select>
-                      </td>
-                      <td className="px-4 py-3 align-top">
-                         <input 
-                           type="number" 
-                           value={editForm.amount} 
-                           onChange={(e) => setEditForm({...editForm, amount: parseFloat(e.target.value)})}
-                           className="bg-gray-900 border border-blue-500 rounded px-2 py-1 text-white w-24 text-xs"
-                         />
-                      </td>
-                      <td className="px-4 py-3 align-top">
-                         <select
-                           value={editForm.status}
-                           onChange={(e) => setEditForm({...editForm, status: e.target.value as PaymentStatus})}
-                           className="bg-gray-900 border border-blue-500 rounded px-2 py-1 text-white w-24 text-xs"
-                         >
-                            <option value={PaymentStatus.PAID}>PAGO</option>
-                            <option value={PaymentStatus.PENDING}>PENDENTE</option>
-                         </select>
-                      </td>
-                      <td className="px-4 py-3 align-top text-gray-500 text-xs">
-                        {t.installments ? `${t.installments.current}/${t.installments.total}` : '-'}
-                      </td>
-                      <td className="px-4 py-3 align-top text-center flex gap-2 justify-center">
-                        <button type="button" onClick={saveEdit} className="text-green-400 hover:bg-green-900/30 p-1 rounded transition-colors" title="Salvar"><ListIcon className="w-4 h-4" /></button>
-                        <button type="button" onClick={cancelEditing} className="text-red-400 hover:bg-red-900/30 p-1 rounded transition-colors" title="Cancelar"><ListIcon className="w-4 h-4 rotate-45" /></button>
-                      </td>
-                    </>
-                  ) : (
-                    // VIEW MODE
-                    <>
-                      <td className="px-4 py-3 font-medium whitespace-nowrap text-white" onClick={() => handleSelectOne(t.id)}>
-                        {formatDate(t.date)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium">{t.description}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="bg-gray-700/50 text-gray-300 py-0.5 px-2 rounded text-[10px] uppercase tracking-wide border border-gray-600">
-                          {t.category}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-gray-400 text-xs italic">
-                          {t.unit || '-'}
-                        </span>
-                      </td>
-                      <td className={`px-4 py-3 font-bold ${t.type === TransactionType.INCOME ? 'text-green-400' : 'text-red-400'}`}>
-                        {formatCurrency(t.amount)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                          t.status === PaymentStatus.PAID 
-                            ? 'text-green-400 bg-green-900/20' 
-                            : 'text-red-400 bg-red-900/20'
-                        }`}>
-                          {t.status === PaymentStatus.PAID ? 'Pago' : 'Pendente'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-400 text-xs">
-                        {t.installments ? `${t.installments.current}/${t.installments.total}` : '-'}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button 
-                            type="button"
-                            onClick={() => startEditing(t)}
-                            className="p-1.5 text-blue-400 hover:text-white hover:bg-blue-600 rounded-md transition-all"
-                            title="Editar"
-                          >
-                            <Edit size={14} />
-                          </button>
-                          <button 
-                            type="button"
-                            onClick={() => onDelete(t.id)}
-                            className="p-1.5 text-red-400 hover:text-white hover:bg-red-600 rounded-md transition-all"
-                            title="Excluir"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </>
-                  )}
+                  <td className={`px-4 py-3 font-bold ${t.type === TransactionType.INCOME ? 'text-green-400' : 'text-red-400'}`}>
+                    {formatCurrency(t.amount)}
+                  </td>
+                  
+                  {/* STATUS SELECTOR COLUMN */}
+                  <td className="px-4 py-3">
+                    <select
+                      value={t.status}
+                      onChange={(e) => handleQuickStatusChange(t, e.target.value as PaymentStatus)}
+                      className={`px-2 py-1 rounded text-[10px] font-bold uppercase border bg-transparent cursor-pointer transition-colors ${
+                        t.status === PaymentStatus.PAID 
+                          ? 'text-green-400 border-green-900/50 hover:bg-green-900/10' 
+                          : 'text-red-400 border-red-900/50 hover:bg-red-900/10'
+                      }`}
+                    >
+                      <option value={PaymentStatus.PAID} className="bg-gray-900">PAGO</option>
+                      <option value={PaymentStatus.PENDING} className="bg-gray-900">PENDENTE</option>
+                    </select>
+                  </td>
+
+                  <td className="px-4 py-3 text-center">
+                    <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => startEditing(t)} className="p-1.5 text-blue-400 hover:bg-blue-600 hover:text-white rounded transition-all" title="Editar Completo"><Edit size={14} /></button>
+                      <button onClick={() => onDelete(t.id)} className="p-1.5 text-red-400 hover:bg-red-600 hover:text-white rounded transition-all" title="Excluir"><Trash2 size={14} /></button>
+                    </div>
+                  </td>
                 </tr>
               ))
             )}
@@ -428,27 +259,5 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDel
     </div>
   );
 };
-
-const ListIcon = ({ className }: { className?: string }) => (
-  <svg 
-    xmlns="http://www.w3.org/2000/svg" 
-    width="24" 
-    height="24" 
-    viewBox="0 0 24 24" 
-    fill="none" 
-    stroke="currentColor" 
-    strokeWidth="2" 
-    strokeLinecap="round" 
-    strokeLinejoin="round" 
-    className={className}
-  >
-    <line x1="8" y1="6" x2="21" y2="6"></line>
-    <line x1="8" y1="12" x2="21" y2="12"></line>
-    <line x1="8" y1="18" x2="21" y2="18"></line>
-    <line x1="3" y1="6" x2="3.01" y2="6"></line>
-    <line x1="3" y1="12" x2="3.01" y2="12"></line>
-    <line x1="3" y1="18" x2="3.01" y2="18"></line>
-  </svg>
-);
 
 export default TransactionTable;

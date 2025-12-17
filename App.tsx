@@ -240,33 +240,15 @@ const App: React.FC = () => {
       }
       setTransactions((prev) => [...prev, ...savedTxs]);
       
-      // AUTO-SWITCH to the month of the added data
       if (savedTxs.length > 0) {
         const firstDate = new Date(savedTxs[0].date + 'T12:00:00');
         if (!isNaN(firstDate.getTime())) {
           setCurrentDate(firstDate);
         }
       }
-
     } catch (error: any) {
       console.error(error);
-      let msg = "Erro ao salvar transação.";
-      const errString = String(error);
-      
-      if (errString.includes("Failed to fetch")) {
-         msg = "ERRO DE CONEXÃO:\nNão foi possível contatar o banco de dados. Verifique sua internet.";
-      }
-      else if (error?.code === '23503') { 
-         msg = "Erro: A loja 'Mirella Doces' não foi encontrada no banco. Recarregue a página.";
-      } 
-      else if (error?.code === '42501') { 
-         msg = "Erro de Permissão (RLS): O banco de dados recusou a gravação. Contate o administrador.";
-      }
-      else if (error?.message) {
-         msg += ` Detalhes: ${error.message}`;
-      }
-      
-      alert(msg);
+      alert("Erro ao salvar transação.");
     } finally {
       setIsLoading(false);
     }
@@ -294,7 +276,7 @@ const App: React.FC = () => {
   const handleDeleteTransactions = (ids: string[]) => {
     openConfirm(
       'Excluir Selecionados',
-      `Tem certeza que deseja excluir ${ids.length} lançamentos selecionados? Esta ação não pode ser desfeita.`,
+      `Tem certeza que deseja excluir ${ids.length} lançamentos selecionados?`,
       async () => {
         setIsLoading(true);
         try {
@@ -350,7 +332,7 @@ const App: React.FC = () => {
   const handleDeleteCategory = (type: TransactionType, name: string) => {
     openConfirm(
       'Excluir Categoria',
-      `Deseja remover a categoria "${name}"? Lançamentos existentes NÃO serão excluídos.`,
+      `Deseja remover a categoria "${name}"?`,
       () => {
         setCategories(prev => {
           const listKey = type === TransactionType.INCOME ? 'income' : 'expense';
@@ -373,7 +355,6 @@ const App: React.FC = () => {
   const selectedYear = currentDate.getFullYear();
   const selectedMonthName = MONTH_NAMES[selectedMonthIndex];
 
-  // Simply filter by date, ignore unit filters since there is only one
   const currentMonthTxs = transactions.filter(t => {
     const d = new Date(t.date + 'T12:00:00');
     return d.getMonth() === selectedMonthIndex && d.getFullYear() === selectedYear;
@@ -383,7 +364,6 @@ const App: React.FC = () => {
   const monthExpense = currentMonthTxs.filter(t => t.type === TransactionType.EXPENSE).reduce((s, t) => s + t.amount, 0);
   const pendingExpense = currentMonthTxs.filter(t => t.type === TransactionType.EXPENSE && t.status === PaymentStatus.PENDING).reduce((s, t) => s + t.amount, 0);
 
-  // --- LAST TRANSACTION HELPER ---
   const lastTransaction = useMemo(() => {
     if (transactions.length === 0) return null;
     return [...transactions].sort((a, b) => {
@@ -393,23 +373,18 @@ const App: React.FC = () => {
     })[0];
   }, [transactions]);
 
-  // --- RENDER ---
-
   if (!authChecked) return null;
 
   if (!isDatabaseReady && currentUser) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
-        {/* ... setup screen content ... */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl shadow-2xl max-w-2xl w-full p-8 animate-fade-in-up">
            <div className="flex flex-col items-center mb-6 text-center">
              <div className="bg-blue-600/20 p-4 rounded-full mb-4">
                <Database size={48} className="text-blue-500" />
              </div>
              <h1 className="text-2xl font-bold text-white mb-2">Configuração do Banco de Dados</h1>
-             <p className="text-gray-400">
-               O sistema conectou ao Supabase, mas detectou que as tabelas precisam ser criadas ou atualizadas.
-             </p>
+             <p className="text-gray-400">As tabelas precisam ser criadas ou atualizadas.</p>
            </div>
            <div className="bg-gray-950 border border-gray-800 rounded-lg p-4 mb-6 relative group">
               <pre className="text-xs text-green-400 font-mono overflow-x-auto p-2 h-64 custom-scrollbar">
@@ -433,14 +408,12 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 font-sans pb-12 relative">
-      {/* Loading Overlay */}
       {isLoading && (
         <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center backdrop-blur-sm">
           <Loader2 className="animate-spin text-blue-500" size={48} />
         </div>
       )}
 
-      {/* HEADER */}
       <header className="bg-gray-950 border-b border-gray-800 shadow-xl sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -457,9 +430,9 @@ const App: React.FC = () => {
                   <span className="uppercase tracking-widest">{currentUser.name} ({currentUser.role})</span>
                   <span className="mx-1 text-gray-700">|</span>
                   {isSupabaseConfigured ? (
-                    <span className="flex items-center gap-1 text-green-500 font-bold" title="Dados salvos na nuvem"><Cloud size={12} /> On-line</span>
+                    <span className="flex items-center gap-1 text-green-500 font-bold"><Cloud size={12} /> On-line</span>
                   ) : (
-                    <span className="flex items-center gap-1 text-orange-500 font-bold" title="Dados salvos localmente"><HardDrive size={12} /> Local</span>
+                    <span className="flex items-center gap-1 text-orange-500 font-bold"><HardDrive size={12} /> Local</span>
                   )}
                   <span className="mx-1 text-gray-700">|</span>
                   <span className="text-blue-400 font-bold">{SINGLE_STORE_NAME}</span>
@@ -468,7 +441,6 @@ const App: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-4 w-full md:w-auto overflow-x-auto">
-              {/* GLOBAL MONTH SELECTOR */}
               <div className="flex items-center bg-gray-800 border border-gray-700 rounded-lg p-1">
                  <button onClick={() => handleMonthChange(-1)} className="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded"><ChevronLeft size={16} /></button>
                  <div className="px-3 text-sm font-bold text-white flex items-center gap-2 min-w-[140px] justify-center select-none">
@@ -478,7 +450,6 @@ const App: React.FC = () => {
                  <button onClick={() => handleMonthChange(1)} className="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded"><ChevronRight size={16} /></button>
               </div>
 
-              {/* Navigation */}
               <nav className="flex bg-gray-800 rounded-lg p-1">
                 <TabButton active={activeTab === ActiveTab.INPUT} onClick={() => setActiveTab(ActiveTab.INPUT)} icon={<Wallet size={18} />} label="Entradas" />
                 <TabButton active={activeTab === ActiveTab.MANAGEMENT} onClick={() => setActiveTab(ActiveTab.MANAGEMENT)} icon={<Receipt size={18} />} label="Gerenciamento" />
@@ -498,45 +469,17 @@ const App: React.FC = () => {
       
       {showConnectionSuccess && (
          <div className="bg-green-600/90 text-white text-center py-1.5 text-xs font-bold animate-fade-in-up flex justify-center items-center gap-2 sticky top-[73px] z-40 backdrop-blur-sm">
-            <CheckCircle2 size={14} /> Conectado ao Supabase com Sucesso!
+            <CheckCircle2 size={14} /> Conectado com Sucesso!
          </div>
       )}
 
-      {!isSupabaseConfigured && (
-        <div className="bg-orange-600/20 border-b border-orange-600/50 text-orange-200 px-4 py-2 text-center text-xs font-bold flex items-center justify-center gap-2">
-           <CloudOff size={14} /> MODO LOCAL (OFFLINE): Os dados estão salvos apenas neste navegador.
-        </div>
-      )}
-
       <main className="container mx-auto px-4 py-8 flex flex-col gap-8">
-        
-        {/* TOP CARDS (Summary) */}
         {activeTab !== ActiveTab.DASHBOARD && activeTab !== ActiveTab.USERS && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <SummaryCard 
-              title={`Recebido (${selectedMonthName})`} 
-              value={formatCurrency(monthIncome)} 
-              colorClass="bg-gradient-to-br from-green-800 to-green-900 border border-green-700"
-              icon={<TrendingUp size={24} className="text-green-300"/>}
-            />
-            <SummaryCard 
-              title={`Pago (${selectedMonthName})`} 
-              value={formatCurrency(monthExpense - pendingExpense)} 
-              colorClass="bg-gradient-to-br from-red-800 to-red-900 border border-red-700"
-              icon={<TrendingDown size={24} className="text-red-300"/>}
-            />
-            <SummaryCard 
-              title={`A Pagar (${selectedMonthName})`} 
-              value={formatCurrency(pendingExpense)} 
-              colorClass="bg-gradient-to-br from-orange-800 to-orange-900 border border-orange-700"
-              icon={<Receipt size={24} className="text-orange-300"/>}
-            />
-            <SummaryCard 
-              title={`Saldo (${selectedMonthName})`} 
-              value={formatCurrency(monthIncome - monthExpense)} 
-              colorClass={`bg-gradient-to-br border ${monthIncome - monthExpense >= 0 ? 'from-blue-800 to-blue-900 border-blue-700' : 'from-gray-700 to-gray-800 border-gray-600'}`}
-              icon={<DollarSign size={24} className="text-blue-300"/>}
-            />
+            <SummaryCard title={`Recebido (${selectedMonthName})`} value={formatCurrency(monthIncome)} colorClass="bg-gradient-to-br from-green-800 to-green-900 border border-green-700" icon={<TrendingUp size={24} className="text-green-300"/>} />
+            <SummaryCard title={`Pago (${selectedMonthName})`} value={formatCurrency(monthExpense - pendingExpense)} colorClass="bg-gradient-to-br from-red-800 to-red-900 border border-red-700" icon={<TrendingDown size={24} className="text-red-300"/>} />
+            <SummaryCard title={`A Pagar (${selectedMonthName})`} value={formatCurrency(pendingExpense)} colorClass="bg-gradient-to-br from-orange-800 to-orange-900 border border-orange-700" icon={<Receipt size={24} className="text-orange-300"/>} />
+            <SummaryCard title={`Saldo (${selectedMonthName})`} value={formatCurrency(monthIncome - monthExpense)} colorClass={`bg-gradient-to-br border ${monthIncome - monthExpense >= 0 ? 'from-blue-800 to-blue-900 border-blue-700' : 'from-gray-700 to-gray-800 border-gray-600'}`} icon={<DollarSign size={24} className="text-blue-300"/>} />
           </div>
         )}
 
@@ -551,15 +494,12 @@ const App: React.FC = () => {
                 onRenameCategory={handleRenameCategory}
                 onDeleteCategory={handleDeleteCategory}
                 units={units}
-                onAddUnit={() => {}} // No-op
-                onRenameUnit={() => {}} // No-op
-                onDeleteUnit={() => {}} // No-op
+                onAddUnit={() => {}} 
+                onRenameUnit={() => {}} 
+                onDeleteUnit={() => {}} 
                 lastTransaction={lastTransaction}
                 existingTransactions={transactions}
               />
-              <div className="text-center text-gray-500 mt-2 hidden md:block text-xs">
-                <p>Cadastre suas entradas e saídas acima. Utilize a aba "Gerenciamento" para editar erros.</p>
-              </div>
             </div>
           )}
 
@@ -571,16 +511,15 @@ const App: React.FC = () => {
                   onDeleteMany={handleDeleteTransactions}
                   onUpdate={handleUpdateTransaction}
                   units={units}
+                  incomeCategories={categories.income}
+                  expenseCategories={categories.expense}
                />
             </div>
           )}
 
           {activeTab === ActiveTab.DASHBOARD && (
             <div className="animate-fade-in-up">
-              <Dashboard 
-                transactions={transactions} 
-                units={units} 
-              />
+              <Dashboard transactions={transactions} units={units} />
             </div>
           )}
 
@@ -590,27 +529,13 @@ const App: React.FC = () => {
         </div>
       </main>
       
-      <ConfirmModal 
-        isOpen={confirmModal.isOpen}
-        title={confirmModal.title}
-        message={confirmModal.message}
-        onConfirm={handleConfirmAction}
-        onCancel={closeConfirm}
-      />
+      <ConfirmModal isOpen={confirmModal.isOpen} title={confirmModal.title} message={confirmModal.message} onConfirm={handleConfirmAction} onCancel={closeConfirm} />
     </div>
   );
 };
 
 const TabButton: React.FC<{ active: boolean; onClick: () => void; icon: React.ReactNode; label: string }> = ({ active, onClick, icon, label }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 whitespace-nowrap ${
-      active 
-        ? 'bg-blue-600 text-white shadow-lg transform scale-105' 
-        : 'text-gray-400 hover:text-white hover:bg-gray-700'
-    }`}
-  >
+  <button type="button" onClick={onClick} className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 whitespace-nowrap ${active ? 'bg-blue-600 text-white shadow-lg transform scale-105' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}>
     {icon}
     <span className="hidden sm:inline">{label}</span>
   </button>
