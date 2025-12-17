@@ -1,4 +1,4 @@
-/// <reference types="vite/client" />
+// Fix: Removed problematic vite/client reference and declared types manually
 
 declare module '*.css';
 declare module '*.png';

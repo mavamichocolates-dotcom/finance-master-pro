@@ -1,54 +1,35 @@
 
+// Fix: Strictly follow @google/genai guidelines for API key and model usage
 import { GoogleGenAI, Type } from "@google/genai";
 
-export type AiProvider = 'gemini' | 'openai';
-
-interface AiConfig {
-  provider: AiProvider;
-  apiKey: string;
-  model: string;
+export interface SuggestionResult {
+  category: string;
+  confidence: number;
+  alternatives: string[];
 }
 
 class AIService {
   private HISTORY_KEY = 'fm_learned_patterns';
+  private MODEL_NAME = 'gemini-3-flash-preview';
 
-  private getConfig(): AiConfig {
-    const saved = localStorage.getItem('fm_ai_config');
-    if (saved) return JSON.parse(saved);
-    
-    return {
-      provider: 'gemini',
-      apiKey: process.env.API_KEY || '',
-      model: 'gemini-3-flash-preview'
-    };
-  }
-
-  /**
-   * Remove números, datas, códigos e caracteres especiais para identificar o padrão puro.
-   */
   private normalizeDescription(desc: string): string {
     return desc
       .toLowerCase()
-      .replace(/[0-9]/g, '') // Remove todos os números
-      .replace(/[^\w\s]/gi, '') // Remove caracteres especiais/pontuação
-      .replace(/\s+/g, ' ') // Remove espaços múltiplos
+      .replace(/[0-9]/g, '')
+      .replace(/[^\w\s]/gi, '')
+      .replace(/\s+/g, ' ')
       .trim();
   }
 
-  /**
-   * Registra uma escolha do usuário como Verdade Absoluta.
-   */
   public learn(description: string, category: string) {
     if (!description || !category || category === 'Outros') return;
     
     const history = this.getHistory();
     const pattern = this.normalizeDescription(description);
     
-    // Só salva se o padrão for relevante (mais de 2 letras)
     if (pattern.length > 2) {
       history[pattern] = category;
       localStorage.setItem(this.HISTORY_KEY, JSON.stringify(history));
-      console.log(`[IA Aprendizado] Padrão memorizado: "${pattern}" -> ${category}`);
     }
   }
 
@@ -63,48 +44,74 @@ class AIService {
     return history[pattern] || null;
   }
 
-  private getGeminiClient(apiKey: string) {
-    if (!apiKey) throw new Error("API_KEY_MISSING");
-    return new GoogleGenAI({ apiKey });
-  }
-
-  async suggestCategory(description: string, type: 'INCOME' | 'EXPENSE', categories: string[]): Promise<string> {
-    // 1. PRIORIDADE MÁXIMA: Verificar se já aprendi esse padrão antes
+  async suggestCategory(description: string, type: 'INCOME' | 'EXPENSE', categories: string[]): Promise<SuggestionResult> {
+    // 1. Verificação de aprendizado local (Confiança 100%)
     const learned = this.getLearnedCategory(description);
     if (learned && categories.includes(learned)) {
-      return learned;
+      return {
+        category: learned,
+        confidence: 1.0,
+        alternatives: []
+      };
     }
 
-    // 2. IA como fallback para novos lançamentos
-    const config = this.getConfig();
+    // 2. IA para novos padrões
     const prompt = `
-      Você é um sistema de categorização financeira determinístico.
-      Regras:
-      1. Responda APENAS o nome da categoria da lista.
-      2. Descrição: "${description}"
-      3. Categorias Permitidas: ${JSON.stringify(categories)}
-      Resposta:
+      Classifique o lançamento financeiro abaixo.
+      Descrição: "${description}"
+      Tipo: ${type === 'INCOME' ? 'Receita/Venda' : 'Despesa/Custo'}
+      Categorias Disponíveis: ${JSON.stringify(categories)}
+
+      Instruções:
+      - Escolha a categoria mais provável.
+      - Defina um nível de confiança de 0.0 a 1.0.
+      - Liste até 2 alternativas caso haja ambiguidade.
     `;
 
     try {
-      const ai = this.getGeminiClient(config.apiKey);
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       const response = await ai.models.generateContent({
-        model: config.model || 'gemini-3-flash-preview',
+        model: this.MODEL_NAME,
         contents: prompt,
-        config: { temperature: 0.1 } // Mais determinístico
+        config: { 
+          temperature: 0.2,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              category: { type: Type.STRING },
+              confidence: { type: Type.NUMBER },
+              alternatives: { 
+                type: Type.ARRAY,
+                items: { type: Type.STRING }
+              }
+            },
+            required: ["category", "confidence", "alternatives"]
+          }
+        }
       });
       
-      const suggested = (response.text || "Outros").trim();
-      return categories.find(c => c.toLowerCase() === suggested.toLowerCase()) || "Outros";
+      const result = JSON.parse(response.text || "{}");
+      
+      // Validação básica para garantir que a categoria existe na lista do usuário
+      const validCategory = categories.find(c => c.toLowerCase() === result.category?.toLowerCase()) || "Outros";
+      const validAlternatives = (result.alternatives || [])
+        .map((alt: string) => categories.find(c => c.toLowerCase() === alt.toLowerCase()))
+        .filter((alt: string | undefined): alt is string => !!alt && alt !== validCategory);
+
+      return {
+        category: validCategory,
+        confidence: result.confidence || 0.5,
+        alternatives: validAlternatives
+      };
     } catch (error) {
-      return "Outros";
+      console.error("[IA Error]", error);
+      return { category: "Outros", confidence: 0, alternatives: [] };
     }
   }
 
   async classifyBulk(items: { description: string, type: string }[], allCategories: string[]) {
     const history = this.getHistory();
-    
-    // Processa o que já é conhecido localmente (Verdade Absoluta)
     const results = items.map(item => {
       const pattern = this.normalizeDescription(item.description);
       const learned = history[pattern];
@@ -117,19 +124,16 @@ class AIService {
     const pending = results.filter(r => !r.category);
     if (pending.length === 0) return results;
 
-    // IA para o que sobrou
-    const config = this.getConfig();
     const prompt = `
-      Classifique os lançamentos abaixo seguindo os padrões de uma doceria.
+      Classifique os lançamentos abaixo.
       Categorias Permitidas: ${JSON.stringify(allCategories)}
       Lançamentos: ${JSON.stringify(pending.map(p => p.description))}
-      Retorne um JSON: [{"description": "...", "category": "..."}]
     `;
 
     try {
-      const ai = this.getGeminiClient(config.apiKey);
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       const response = await ai.models.generateContent({
-        model: config.model || 'gemini-3-flash-preview',
+        model: this.MODEL_NAME,
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -154,6 +158,7 @@ class AIService {
         return { ...r, category: aiMatch?.category || "Outros" };
       });
     } catch (error) {
+      console.error("[IA Bulk Error]", error);
       return results.map(r => ({ ...r, category: r.category || "Outros" }));
     }
   }

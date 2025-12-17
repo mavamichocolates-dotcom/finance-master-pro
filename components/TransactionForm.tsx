@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Save, Calendar, DollarSign, Tag, List, X, Building2, Settings, Edit2, Trash2, History, TrendingUp, TrendingDown, CheckCircle2, Copy, Repeat, Divide, ArrowRight, Upload, Sparkles, Loader2 } from 'lucide-react';
+import { Plus, Save, Calendar, DollarSign, Tag, List, X, Building2, Settings, Edit2, Trash2, History, TrendingUp, TrendingDown, CheckCircle2, Copy, Repeat, Divide, ArrowRight, Upload, Sparkles, Loader2, Info } from 'lucide-react';
 import { TransactionType, PaymentStatus, Transaction } from '../types';
 import { generateId, getTodayString, formatCurrency, formatDate } from '../utils';
 import { SINGLE_STORE_NAME } from '../constants';
 import BankImportModal from './BankImportModal';
-import { aiService } from '../services/ai';
+import { aiService, SuggestionResult } from '../services/ai';
 
 interface TransactionFormProps {
   onAddTransaction: (transactions: Transaction[]) => void;
@@ -41,7 +41,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [category, setCategory] = useState('');
   const [date, setDate] = useState(getTodayString());
   const [status, setStatus] = useState<PaymentStatus>(PaymentStatus.PAID);
+  
+  // Estados da IA
   const [isAiSuggesting, setIsAiSuggesting] = useState(false);
+  const [aiResult, setAiResult] = useState<SuggestionResult | null>(null);
   
   const [repeatMode, setRepeatMode] = useState<RepeatMode>('SINGLE');
   const [repeatCount, setRepeatCount] = useState(2);
@@ -52,13 +55,19 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [newCategoryName, setNewCategoryName] = useState('');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
+  // Limpa sugestões se mudar a descrição significativamente
+  useEffect(() => {
+    if (aiResult) setAiResult(null);
+  }, [description, type]);
+
   const handleAiSuggest = async () => {
     if (!description) return;
     setIsAiSuggesting(true);
     try {
       const cats = type === TransactionType.INCOME ? incomeCategories : expenseCategories;
-      const suggestion = await aiService.suggestCategory(description, type, cats);
-      setCategory(suggestion);
+      const result = await aiService.suggestCategory(description, type, cats);
+      setAiResult(result);
+      setCategory(result.category);
     } catch (e) {
       console.error(e);
     } finally {
@@ -72,8 +81,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
     const numAmount = parseFloat(amount.replace(',', '.'));
     const newTransactions: Transaction[] = [];
-
-    // REGRA: Incomes (Vendas) já nascem revisadas. Expenses (Saídas) precisam de revisão se forem categoria Outros.
     const isReviewed = type === TransactionType.INCOME || (category !== 'Outros');
 
     if (repeatMode === 'SINGLE') {
@@ -111,6 +118,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     setDescription('');
     setAmount('');
     setRepeatMode('SINGLE');
+    setAiResult(null);
   };
 
   const handleCloneLast = () => {
@@ -134,6 +142,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   const currentCategories = type === TransactionType.INCOME ? incomeCategories : expenseCategories;
   const headerColor = type === TransactionType.INCOME ? 'bg-green-700' : 'bg-red-700';
+
+  // Helper para cor da confiança
+  const getConfidenceColor = (score: number) => {
+    if (score >= 0.8) return 'text-green-400 bg-green-900/30 border-green-700/50';
+    if (score >= 0.5) return 'text-yellow-400 bg-yellow-900/30 border-yellow-700/50';
+    return 'text-red-400 bg-red-900/30 border-red-700/50';
+  };
 
   return (
     <div className="bg-gray-800 rounded-lg shadow-xl overflow-hidden border border-gray-700 relative flex flex-col">
@@ -164,25 +179,55 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         <div>
           <label className="block text-gray-400 text-sm font-bold mb-2 flex items-center justify-between">
             <span className="flex items-center gap-2"><Tag size={16} /> Categoria</span>
-            <button 
-              type="button" 
-              onClick={handleAiSuggest} 
-              disabled={isAiSuggesting || !description}
-              className="text-[10px] flex items-center gap-1 bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 px-2 py-0.5 rounded border border-purple-500/30 transition-all disabled:opacity-30"
-            >
-              {isAiSuggesting ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />}
-              IA Sugerir
-            </button>
+            <div className="flex items-center gap-2">
+              {aiResult && (
+                <div className={`px-2 py-0.5 rounded border text-[9px] font-black uppercase flex items-center gap-1 ${getConfidenceColor(aiResult.confidence)} animate-fade-in-up`}>
+                  <Sparkles size={8} /> {Math.round(aiResult.confidence * 100)}% Confiança
+                </div>
+              )}
+              <button 
+                type="button" 
+                onClick={handleAiSuggest} 
+                disabled={isAiSuggesting || !description}
+                className="text-[10px] flex items-center gap-1 bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 px-2 py-0.5 rounded border border-purple-500/30 transition-all disabled:opacity-30"
+              >
+                {isAiSuggesting ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />}
+                IA Sugerir
+              </button>
+            </div>
           </label>
-          <div className="flex gap-2">
-            <select required value={category} onChange={(e) => setCategory(e.target.value)} className="w-full bg-gray-900 text-white border border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:border-blue-500">
-              <option value="">Selecione...</option>
-              {currentCategories.map((cat, idx) => (
-                <option key={`${cat}-${idx}`} value={cat}>{cat}</option>
-              ))}
-            </select>
-            <button type="button" onClick={() => setIsCategoryModalOpen(true)} className="bg-gray-700 hover:bg-gray-600 text-white border border-gray-600 rounded-md px-3 flex items-center justify-center transition-colors"><Plus size={20} /></button>
-            <button type="button" onClick={() => setIsCategoryManageOpen(true)} className="bg-gray-700 hover:bg-gray-600 text-white border border-gray-600 rounded-md px-3 flex items-center justify-center transition-colors"><Settings size={20} /></button>
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <select required value={category} onChange={(e) => setCategory(e.target.value)} className="w-full bg-gray-900 text-white border border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:border-blue-500">
+                <option value="">Selecione...</option>
+                {currentCategories.map((cat, idx) => (
+                  <option key={`${cat}-${idx}`} value={cat}>{cat}</option>
+                ))}
+              </select>
+              <button type="button" onClick={() => setIsCategoryModalOpen(true)} className="bg-gray-700 hover:bg-gray-600 text-white border border-gray-600 rounded-md px-3 flex items-center justify-center transition-colors"><Plus size={20} /></button>
+              <button type="button" onClick={() => setIsCategoryManageOpen(true)} className="bg-gray-700 hover:bg-gray-600 text-white border border-gray-600 rounded-md px-3 flex items-center justify-center transition-colors"><Settings size={20} /></button>
+            </div>
+            
+            {/* Alternativas Sugeridas */}
+            {aiResult && aiResult.alternatives.length > 0 && (
+              <div className="mt-1 animate-fade-in-up">
+                <p className="text-[10px] text-gray-500 mb-1 flex items-center gap-1 uppercase font-bold tracking-tight">
+                   <Info size={10} /> Ou prefere:
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {aiResult.alternatives.map((alt) => (
+                    <button
+                      key={alt}
+                      type="button"
+                      onClick={() => setCategory(alt)}
+                      className="text-[10px] bg-gray-700 hover:bg-blue-900/50 text-gray-300 hover:text-blue-300 px-2 py-0.5 rounded border border-gray-600 hover:border-blue-500 transition-all"
+                    >
+                      {alt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -197,7 +242,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         </div>
 
         <div>
-          <label className="block text-gray-400 text-sm font-bold mb-2">Status</label>
+          <label className="block text-gray-400 text-sm font-bold mb-2 text-xs">Status do Pagamento</label>
           <select value={status} onChange={(e) => setStatus(e.target.value as PaymentStatus)} className={`w-full text-white border border-gray-600 rounded-md py-2 px-3 focus:outline-none font-bold ${status === PaymentStatus.PAID ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400'}`}>
             <option value={PaymentStatus.PAID}>{type === TransactionType.INCOME ? 'RECEBIDO' : 'PAGO'}</option>
             <option value={PaymentStatus.PENDING}>PENDENTE</option>
