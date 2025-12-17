@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Transaction, TransactionType, PaymentStatus, User } from './types';
 import { db } from './services/db';
@@ -9,8 +10,9 @@ import SummaryCard from './components/SummaryCard';
 import ConfirmModal from './components/ConfirmModal';
 import Login from './components/Login';
 import UserManagement from './components/UserManagement';
+import AiConfigModal from './components/AiConfigModal';
 import { formatCurrency, formatDate } from './utils';
-import { LayoutDashboard, Wallet, Receipt, TrendingUp, TrendingDown, DollarSign, Building2, LogOut, Shield, User as UserIcon, Loader2, HardDrive, Cloud, CloudOff, Database, Copy, CheckCircle2, History, ArrowRight, ChevronLeft, ChevronRight, Calendar, Sparkles, ExternalLink } from 'lucide-react';
+import { LayoutDashboard, Wallet, Receipt, TrendingUp, TrendingDown, DollarSign, Building2, LogOut, Shield, User as UserIcon, Loader2, HardDrive, Cloud, CloudOff, Database, Copy, CheckCircle2, History, ArrowRight, ChevronLeft, ChevronRight, Calendar, Sparkles, ExternalLink, Zap, Cpu } from 'lucide-react';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, MONTH_NAMES, SINGLE_STORE_NAME } from './constants';
 import { isSupabaseConfigured } from './src/supabase';
 
@@ -112,7 +114,8 @@ const App: React.FC = () => {
   const [showConnectionSuccess, setShowConnectionSuccess] = useState(false);
 
   // AI State
-  const [hasAiKey, setHasAiKey] = useState(false);
+  const [aiProvider, setAiProvider] = useState<'gemini' | 'openai' | null>(null);
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
 
   // App State
   const [activeTab, setActiveTab] = useState<ActiveTab>(ActiveTab.INPUT);
@@ -153,11 +156,7 @@ const App: React.FC = () => {
         setCurrentUser(user);
         setAuthChecked(true);
         
-        // Check AI Key
-        if (typeof window !== 'undefined' && (window as any).aistudio) {
-          const keyStatus = await (window as any).aistudio.hasSelectedApiKey();
-          setHasAiKey(keyStatus);
-        }
+        checkAiStatus();
 
         if (user) {
           setIsLoading(true);
@@ -185,6 +184,23 @@ const App: React.FC = () => {
     initApp();
   }, []);
 
+  const checkAiStatus = () => {
+    const saved = localStorage.getItem('fm_ai_config');
+    if (saved) {
+      const config = JSON.parse(saved);
+      if (config.apiKey) {
+        setAiProvider(config.provider);
+        return;
+      }
+    }
+    // Verifica se tem no process.env como fallback
+    if (process.env.API_KEY) {
+      setAiProvider('gemini');
+    } else {
+      setAiProvider(null);
+    }
+  };
+
   // Save Categories to LocalStorage
   useEffect(() => {
     localStorage.setItem('finance_categories', JSON.stringify(categories));
@@ -192,16 +208,6 @@ const App: React.FC = () => {
 
 
   // --- HANDLERS ---
-
-  const handleOpenAiKeySelector = async () => {
-    if (typeof window !== 'undefined' && (window as any).aistudio) {
-      await (window as any).aistudio.openSelectKey();
-      // Assume selection successful as per guidelines
-      setHasAiKey(true);
-    } else {
-      alert("Seletor de chaves não disponível neste ambiente.");
-    }
-  };
 
   const handleMonthChange = (direction: -1 | 1) => {
     const newDate = new Date(currentDate);
@@ -455,11 +461,12 @@ const App: React.FC = () => {
                   )}
                   <span className="mx-1 text-gray-700">|</span>
                   <button 
-                    onClick={handleOpenAiKeySelector}
-                    className={`flex items-center gap-1 font-bold transition-all px-2 py-0.5 rounded ${hasAiKey ? 'text-purple-400 hover:bg-purple-900/20' : 'text-red-400 bg-red-900/20 animate-pulse hover:bg-red-900/40'}`}
-                    title={hasAiKey ? "IA Configurada" : "Clique para configurar a Chave da IA"}
+                    onClick={() => setIsAiModalOpen(true)}
+                    className={`flex items-center gap-1 font-bold transition-all px-2 py-0.5 rounded ${aiProvider ? 'text-purple-400 hover:bg-purple-900/20' : 'text-red-400 bg-red-900/20 animate-pulse hover:bg-red-900/40'}`}
+                    title={aiProvider ? `IA: ${aiProvider.toUpperCase()}` : "Clique para configurar a Inteligência Artificial"}
                   >
-                    <Sparkles size={12} /> {hasAiKey ? 'IA Ativa' : 'Configurar IA'}
+                    {aiProvider === 'openai' ? <Zap size={12} /> : aiProvider === 'gemini' ? <Cpu size={12} /> : <Sparkles size={12} />}
+                    {aiProvider ? `IA: ${aiProvider.toUpperCase()}` : 'Configurar IA'}
                   </button>
                 </div>
               </div>
@@ -499,21 +506,18 @@ const App: React.FC = () => {
       )}
 
       <main className="container mx-auto px-4 py-8 flex flex-col gap-8">
-        {!hasAiKey && (
+        {!aiProvider && (
           <div className="bg-purple-900/20 border border-purple-800/50 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 animate-fade-in-up">
             <div className="flex items-center gap-3">
               <Sparkles className="text-purple-400 shrink-0" size={24} />
               <div>
                 <p className="text-sm font-bold text-white">Potencialize seu sistema com Inteligência Artificial!</p>
-                <p className="text-xs text-gray-400">Configure sua Chave API do Gemini para categorização automática e análise inteligente.</p>
+                <p className="text-xs text-gray-400">Configure sua Chave API do Gemini ou ChatGPT para categorização automática e análise inteligente.</p>
               </div>
             </div>
             <div className="flex gap-3">
-              <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="text-xs text-purple-400 hover:underline flex items-center gap-1">
-                Documentação <ExternalLink size={10} />
-              </a>
-              <button onClick={handleOpenAiKeySelector} className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-lg transition-all">
-                Configurar Chave Agora
+              <button onClick={() => setIsAiModalOpen(true)} className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-lg transition-all">
+                Configurar IA Agora
               </button>
             </div>
           </div>
@@ -574,6 +578,7 @@ const App: React.FC = () => {
         </div>
       </main>
       
+      <AiConfigModal isOpen={isAiModalOpen} onClose={() => setIsAiModalOpen(false)} onSave={checkAiStatus} />
       <ConfirmModal isOpen={confirmModal.isOpen} title={confirmModal.title} message={confirmModal.message} onConfirm={handleConfirmAction} onCancel={closeConfirm} />
     </div>
   );
