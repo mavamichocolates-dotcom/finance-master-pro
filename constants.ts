@@ -1,38 +1,17 @@
 
-import { TransactionType } from './types';
-
 export const EXPENSE_CATEGORIES = [
-  'Frete',
-  'Compras de Equipamentos',
-  'Kinder Bueno',
-  'Nutella',
-  'Insumos Gerais',
+  'Fornecedor',
   'Aluguel',
-  'Energia',
-  'Água',
-  'Internet',
-  'Salários',
-  'Manutenção',
-  'Impostos',
+  'Alimentação',
   'Marketing',
+  'Impostos',
   'Outros',
 ];
 
 export const INCOME_CATEGORIES = [
-  'Vendas Loja',
-  'iFood',
-  '99Food',
-  'Rappi',
-  'Encomendas',
-  'Eventos',
+  'Receita',
   'Outros',
 ];
-
-export const UNITS = [
-  'Mavami Cookies Osasco',
-  'Mavami Cookies SP',
-  'Matriz',
-]; // Mantendo compatibilidade com importações antigas se necessário, mas o app usará o abaixo.
 
 export const SINGLE_STORE_NAME = 'Mirella Doces';
 
