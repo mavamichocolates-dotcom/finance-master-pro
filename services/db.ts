@@ -16,7 +16,6 @@ class DBService {
     
     if (error) {
       console.error('Error fetching transactions:', error);
-      // Se der erro de coluna, lançamos um erro amigável que o App.tsx entende
       if (error.message?.includes('reviewed')) throw new Error('MISSING_COLUMN_REVIEWED');
       return [];
     }
@@ -29,7 +28,7 @@ class DBService {
       category: t.category, 
       date: t.date, 
       status: t.status, 
-      reviewed: !!t.reviewed, // Coerção para boolean
+      reviewed: !!t.reviewed,
       unit: t.store_name, 
       userId: t.user_id, 
       createdAt: t.created_at
@@ -82,11 +81,7 @@ class DBService {
     };
 
     const { error } = await supabase.from('transactions').update(dbTx).eq('id', t.id);
-    
-    if (error) {
-      console.error("Supabase Update Error:", error);
-      throw error;
-    }
+    if (error) throw error;
   }
 
   async deleteTransaction(id: string): Promise<void> {
@@ -115,10 +110,43 @@ class DBService {
     return { id: data.id, name: data.name, email: data.email, role: data.role, allowedUnits: [], active: data.active, createdAt: data.created_at, passwordHash: data.password_hash };
   }
 
-  async saveUser(u: User): Promise<void> {}
-  async deleteUser(id: string): Promise<void> {}
+  async saveUser(u: User): Promise<void> {
+    if (!isSupabaseConfigured) return;
+    const dbUser = {
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      active: u.active,
+      password_hash: u.passwordHash
+    };
+    if (u.id) {
+      await supabase.from('app_users').update(dbUser).eq('id', u.id);
+    } else {
+      await supabase.from('app_users').insert(dbUser);
+    }
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    if (!isSupabaseConfigured) return;
+    await supabase.from('app_users').delete().eq('id', id);
+  }
+
+  async clearAllData(): Promise<void> {
+    // 1. Limpar LocalStorage
+    localStorage.removeItem('fm_local_transactions');
+    localStorage.removeItem('fm_baseline_balance');
+    localStorage.removeItem('finance_categories');
+    localStorage.removeItem('fm_learned_patterns');
+
+    // 2. Limpar Nuvem (Se configurado)
+    if (isSupabaseConfigured) {
+      // Deletar transações (CUIDADO: Isso limpa a tabela inteira)
+      const { error: txError } = await supabase.from('transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      if (txError) console.error("Erro ao limpar transações na nuvem", txError);
+    }
+  }
+
   async getUnits(): Promise<string[]> { return [SINGLE_STORE_NAME]; }
-  async clearAllData(): Promise<void> {}
 }
 
 export const db = new DBService();
