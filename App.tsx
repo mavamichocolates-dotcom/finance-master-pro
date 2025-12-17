@@ -24,8 +24,9 @@ enum ActiveTab {
   USERS = 'USERS', // Admin Only
 }
 
-const SQL_SETUP_SCRIPT = `-- MELHORIA DE SEGURANÇA E INTEGRIDADE
--- 1. TABELAS (Estrutura Básica)
+const SQL_SETUP_SCRIPT = `-- SCRIPT DE ATUALIZAÇÃO / CRIAÇÃO
+-- Execute isso no SQL Editor do Supabase se houver erros de coluna
+
 CREATE TABLE IF NOT EXISTS app_users (
   id text PRIMARY KEY,
   name text,
@@ -58,6 +59,14 @@ CREATE TABLE IF NOT EXISTS transactions (
   created_at timestamptz DEFAULT now()
 );
 
+-- Garantir que a coluna reviewed existe (caso a tabela já existisse)
+DO $$ 
+BEGIN 
+  ALTER TABLE transactions ADD COLUMN IF NOT EXISTS reviewed boolean DEFAULT false;
+EXCEPTION 
+  WHEN others THEN null; 
+END $$;
+
 -- 2. INTEGRIDADE REFERENCIAL
 DO $$ BEGIN
   ALTER TABLE transactions 
@@ -75,12 +84,7 @@ EXCEPTION
   WHEN duplicate_object THEN null;
 END $$;
 
--- 3. PERFORMANCE E SEGURANÇA
-CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
-CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
-CREATE INDEX IF NOT EXISTS idx_transactions_store ON transactions(store_name);
-
--- 4. POLÍTICAS DE ACESSO (RLS)
+-- 3. POLÍTICAS DE ACESSO (RLS)
 ALTER TABLE app_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE stores ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
@@ -97,32 +101,20 @@ DO $$ BEGIN
   CREATE POLICY "Public Access Transactions" ON transactions FOR ALL USING (true) WITH CHECK (true);
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
--- 5. DADOS INICIAIS
-INSERT INTO stores (name) VALUES 
-('Mirella Doces')
-ON CONFLICT (name) DO NOTHING;
+INSERT INTO stores (name) VALUES ('Mirella Doces') ON CONFLICT (name) DO NOTHING;
 `;
 
 const App: React.FC = () => {
-  // Auth State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  
-  // Database State
   const [isDatabaseReady, setIsDatabaseReady] = useState(true);
   const [copySuccess, setCopySuccess] = useState(false);
   const [showConnectionSuccess, setShowConnectionSuccess] = useState(false);
-
-  // AI State
   const [aiProvider, setAiProvider] = useState<'gemini' | 'openai' | null>(null);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
-
-  // App State
   const [activeTab, setActiveTab] = useState<ActiveTab>(ActiveTab.INPUT);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  
-  // Data State
   const [categories, setCategories] = useState<{income: string[], expense: string[]}>(() => {
     const savedCats = localStorage.getItem('finance_categories');
     return savedCats ? JSON.parse(savedCats) : {
@@ -130,13 +122,8 @@ const App: React.FC = () => {
       expense: EXPENSE_CATEGORIES
     };
   });
-
-  // Single unit logic
   const units = [SINGLE_STORE_NAME];
-  
   const [currentDate, setCurrentDate] = useState(new Date());
-
-  // Confirmation Modal State
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -149,16 +136,13 @@ const App: React.FC = () => {
     onConfirm: () => {},
   });
 
-  // --- INITIALIZATION ---
   useEffect(() => {
     const initApp = async () => {
       try {
         const user = auth.getCurrentUser();
         setCurrentUser(user);
         setAuthChecked(true);
-        
         checkAiStatus();
-
         if (user) {
           setIsLoading(true);
           const [txs] = await Promise.all([
@@ -166,7 +150,6 @@ const App: React.FC = () => {
             db.getUsers()
           ]);
           setTransactions(txs);
-          
           if (isSupabaseConfigured) {
              setShowConnectionSuccess(true);
              setTimeout(() => setShowConnectionSuccess(false), 5000);
@@ -181,7 +164,6 @@ const App: React.FC = () => {
         setIsLoading(false);
       }
     };
-    
     initApp();
   }, []);
 
@@ -194,21 +176,13 @@ const App: React.FC = () => {
         return;
       }
     }
-    // Verifica se tem no process.env como fallback
-    if (process.env.API_KEY) {
-      setAiProvider('gemini');
-    } else {
-      setAiProvider(null);
-    }
+    if (process.env.API_KEY) setAiProvider('gemini');
+    else setAiProvider(null);
   };
 
-  // Save Categories to LocalStorage
   useEffect(() => {
     localStorage.setItem('finance_categories', JSON.stringify(categories));
   }, [categories]);
-
-
-  // --- HANDLERS ---
 
   const handleMonthChange = (direction: -1 | 1) => {
     const newDate = new Date(currentDate);
@@ -219,7 +193,6 @@ const App: React.FC = () => {
   const handleLoginSuccess = async () => {
     const user = auth.getCurrentUser();
     setCurrentUser(user);
-    
     setIsLoading(true);
     try {
       const [txs] = await Promise.all([
@@ -227,28 +200,15 @@ const App: React.FC = () => {
         db.getUsers()
       ]);
       setTransactions(txs);
-      
-      if (isSupabaseConfigured) {
-         setShowConnectionSuccess(true);
-         setTimeout(() => setShowConnectionSuccess(false), 5000);
-      }
-
+      if (isSupabaseConfigured) setShowConnectionSuccess(true);
     } catch (e: any) {
-      console.error(e);
-      if (e.message === "MISSING_TABLES") {
-        setIsDatabaseReady(false);
-      }
+      if (e.message === "MISSING_TABLES") setIsDatabaseReady(false);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleLogout = () => {
-    auth.logout();
-    setCurrentUser(null);
-    setTransactions([]);
-  };
-
+  const handleLogout = () => { auth.logout(); setCurrentUser(null); setTransactions([]); };
   const handleCopySQL = () => {
     navigator.clipboard.writeText(SQL_SETUP_SCRIPT);
     setCopySuccess(true);
@@ -265,34 +225,21 @@ const App: React.FC = () => {
         if (saved) savedTxs.push(saved);
       }
       setTransactions((prev) => [...prev, ...savedTxs]);
-      
-      if (savedTxs.length > 0) {
-        const firstDate = new Date(savedTxs[0].date + 'T12:00:00');
-        if (!isNaN(firstDate.getTime())) {
-          setCurrentDate(firstDate);
-        }
-      }
     } catch (error: any) {
-      console.error(error);
-      alert("Erro ao salvar transação.");
+      alert("Erro ao salvar: " + (error.message || error));
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleDeleteTransaction = (id: string) => {
-    const t = transactions.find((tr) => tr.id === id);
-    const message = t 
-      ? `Deseja excluir o lançamento "${t.description}" de ${formatCurrency(t.amount)}?`
-      : 'Tem certeza que deseja excluir este lançamento?';
-
-    openConfirm('Excluir Lançamento', message, async () => {
+    openConfirm('Excluir Lançamento', 'Deseja excluir este lançamento?', async () => {
       setIsLoading(true);
       try {
         await db.deleteTransaction(id);
         setTransactions((prev) => prev.filter((t) => t.id !== id));
-      } catch (e) {
-        alert("Erro ao excluir.");
+      } catch (e: any) {
+        alert("Erro ao excluir: " + e.message);
       } finally {
         setIsLoading(false);
       }
@@ -300,16 +247,13 @@ const App: React.FC = () => {
   };
 
   const handleDeleteTransactions = (ids: string[]) => {
-    openConfirm(
-      'Excluir Selecionados',
-      `Tem certeza que deseja excluir ${ids.length} lançamentos selecionados?`,
-      async () => {
+    openConfirm('Excluir Selecionados', `Excluir ${ids.length} lançamentos?`, async () => {
         setIsLoading(true);
         try {
           await db.deleteTransactions(ids);
           setTransactions((prev) => prev.filter((t) => !ids.includes(t.id)));
-        } catch (e) {
-          alert("Erro ao excluir itens.");
+        } catch (e: any) {
+          alert("Erro ao excluir itens: " + e.message);
         } finally {
           setIsLoading(false);
         }
@@ -322,44 +266,32 @@ const App: React.FC = () => {
     try {
       await db.updateTransaction(updated);
       setTransactions((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-    } catch (e) {
-      alert("Erro ao atualizar.");
+    } catch (e: any) {
+      // MOSTRA O ERRO REAL PARA DIAGNÓSTICO
+      const errorMsg = e.message || JSON.stringify(e);
+      console.error("Update Error:", e);
+      alert(`Erro ao atualizar: ${errorMsg}\n\nSe o erro mencionar a coluna 'reviewed', execute o script SQL de atualização no Supabase.`);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // --- Categories ---
-
   const handleAddCategory = (type: TransactionType, name: string) => {
     setCategories(prev => ({
       ...prev,
-      [type === TransactionType.INCOME ? 'income' : 'expense']: [
-        ...(type === TransactionType.INCOME ? prev.income : prev.expense),
-        name
-      ]
+      [type === TransactionType.INCOME ? 'income' : 'expense']: [...(type === TransactionType.INCOME ? prev.income : prev.expense), name]
     }));
   };
 
   const handleRenameCategory = (type: TransactionType, oldName: string, newName: string) => {
     setCategories(prev => {
       const listKey = type === TransactionType.INCOME ? 'income' : 'expense';
-      const newList = prev[listKey].map(c => c === oldName ? newName : c);
-      return { ...prev, [listKey]: newList };
+      return { ...prev, [listKey]: prev[listKey].map(c => c === oldName ? newName : c) };
     });
-    setTransactions(prev => prev.map(t => {
-      if (t.type === type && t.category === oldName) {
-        return { ...t, category: newName };
-      }
-      return t;
-    }));
   };
 
   const handleDeleteCategory = (type: TransactionType, name: string) => {
-    openConfirm(
-      'Excluir Categoria',
-      `Deseja remover a categoria "${name}"?`,
-      () => {
+    openConfirm('Excluir Categoria', `Deseja remover "${name}"?`, () => {
         setCategories(prev => {
           const listKey = type === TransactionType.INCOME ? 'income' : 'expense';
           return { ...prev, [listKey]: prev[listKey].filter(c => c !== name) };
@@ -371,214 +303,96 @@ const App: React.FC = () => {
   const openConfirm = (title: string, message: string, action: () => void) => {
     setConfirmModal({ isOpen: true, title, message, onConfirm: action });
   };
-  
   const closeConfirm = () => setConfirmModal(prev => ({ ...prev, isOpen: false }));
   const handleConfirmAction = () => { confirmModal.onConfirm(); closeConfirm(); };
-
-  // --- RENDERING HELPERS ---
 
   const selectedMonthIndex = currentDate.getMonth();
   const selectedYear = currentDate.getFullYear();
   const selectedMonthName = MONTH_NAMES[selectedMonthIndex];
-
   const currentMonthTxs = transactions.filter(t => {
     const d = new Date(t.date + 'T12:00:00');
     return d.getMonth() === selectedMonthIndex && d.getFullYear() === selectedYear;
   });
-
   const monthIncome = currentMonthTxs.filter(t => t.type === TransactionType.INCOME).reduce((s, t) => s + t.amount, 0);
   const monthExpense = currentMonthTxs.filter(t => t.type === TransactionType.EXPENSE).reduce((s, t) => s + t.amount, 0);
   const pendingExpense = currentMonthTxs.filter(t => t.type === TransactionType.EXPENSE && t.status === PaymentStatus.PENDING).reduce((s, t) => s + t.amount, 0);
-
   const lastTransaction = useMemo(() => {
     if (transactions.length === 0) return null;
-    return [...transactions].sort((a, b) => {
-      const timeA = new Date(a.createdAt || a.date).getTime();
-      const timeB = new Date(b.createdAt || b.date).getTime();
-      return timeB - timeA;
-    })[0];
+    return [...transactions].sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime())[0];
   }, [transactions]);
 
   if (!authChecked) return null;
-
   if (!isDatabaseReady && currentUser) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
         <div className="bg-gray-900 border border-gray-800 rounded-xl shadow-2xl max-w-2xl w-full p-8 animate-fade-in-up">
            <div className="flex flex-col items-center mb-6 text-center">
-             <div className="bg-blue-600/20 p-4 rounded-full mb-4">
-               <Database size={48} className="text-blue-500" />
-             </div>
+             <div className="bg-blue-600/20 p-4 rounded-full mb-4"><Database size={48} className="text-blue-500" /></div>
              <h1 className="text-2xl font-bold text-white mb-2">Configuração do Banco de Dados</h1>
-             <p className="text-gray-400">As tabelas precisam ser criadas ou atualizadas.</p>
+             <p className="text-gray-400">Execute o script abaixo no SQL Editor do seu Supabase para atualizar as tabelas.</p>
            </div>
            <div className="bg-gray-950 border border-gray-800 rounded-lg p-4 mb-6 relative group">
-              <pre className="text-xs text-green-400 font-mono overflow-x-auto p-2 h-64 custom-scrollbar">
-                {SQL_SETUP_SCRIPT}
-              </pre>
+              <pre className="text-xs text-green-400 font-mono overflow-x-auto p-2 h-64 custom-scrollbar">{SQL_SETUP_SCRIPT}</pre>
               <button onClick={handleCopySQL} className="absolute top-4 right-4 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-xs font-bold flex items-center gap-2 shadow-lg transition-all">
                 {copySuccess ? <CheckCircle2 size={14} /> : <Copy size={14} />} {copySuccess ? 'Copiado!' : 'Copiar SQL'}
               </button>
            </div>
-           <button onClick={() => window.location.reload()} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-transform hover:scale-[1.01]">
-              Tabelas Criadas! (Recarregar)
-           </button>
+           <button onClick={() => window.location.reload()} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-transform hover:scale-[1.01]">Tabelas Criadas! (Recarregar)</button>
         </div>
       </div>
     );
   }
-
-  if (!currentUser) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
-  }
+  if (!currentUser) return <Login onLoginSuccess={handleLoginSuccess} />;
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 font-sans pb-12 relative">
-      {isLoading && (
-        <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center backdrop-blur-sm">
-          <Loader2 className="animate-spin text-blue-500" size={48} />
-        </div>
-      )}
-
+      {isLoading && <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center backdrop-blur-sm"><Loader2 className="animate-spin text-blue-500" size={48} /></div>}
       <header className="bg-gray-950 border-b border-gray-800 shadow-xl sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-3">
-              <div className="bg-gradient-to-tr from-blue-600 to-blue-400 p-2 rounded-lg">
-                <LayoutDashboard size={28} className="text-white" />
-              </div>
+              <div className="bg-gradient-to-tr from-blue-600 to-blue-400 p-2 rounded-lg"><LayoutDashboard size={28} className="text-white" /></div>
               <div>
-                <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-teal-300">
-                  FinanceMaster Pro
-                </h1>
+                <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-teal-300">FinanceMaster Pro</h1>
                 <div className="flex items-center gap-2 text-xs text-gray-500">
-                  <UserIcon size={10} />
-                  <span className="uppercase tracking-widest">{currentUser.name} ({currentUser.role})</span>
-                  <span className="mx-1 text-gray-700">|</span>
-                  {isSupabaseConfigured ? (
-                    <span className="flex items-center gap-1 text-green-500 font-bold"><Cloud size={12} /> On-line</span>
-                  ) : (
-                    <span className="flex items-center gap-1 text-orange-500 font-bold"><HardDrive size={12} /> Local</span>
-                  )}
-                  <span className="mx-1 text-gray-700">|</span>
-                  <button 
-                    onClick={() => setIsAiModalOpen(true)}
-                    className={`flex items-center gap-1 font-bold transition-all px-2 py-0.5 rounded ${aiProvider ? 'text-purple-400 hover:bg-purple-900/20' : 'text-red-400 bg-red-900/20 animate-pulse hover:bg-red-900/40'}`}
-                    title={aiProvider ? `IA: ${aiProvider.toUpperCase()}` : "Clique para configurar a Inteligência Artificial"}
-                  >
-                    {aiProvider === 'openai' ? <Zap size={12} /> : aiProvider === 'gemini' ? <Cpu size={12} /> : <Sparkles size={12} />}
-                    {aiProvider ? `IA: ${aiProvider.toUpperCase()}` : 'Configurar IA'}
-                  </button>
+                  <UserIcon size={10} /><span>{currentUser.name}</span><span className="mx-1">|</span>
+                  {isSupabaseConfigured ? <span className="text-green-500 font-bold">On-line</span> : <span className="text-orange-500 font-bold">Local</span>}
+                  <span className="mx-1">|</span>
+                  <button onClick={() => setIsAiModalOpen(true)} className="text-purple-400 font-bold">IA: {aiProvider?.toUpperCase() || 'OFF'}</button>
                 </div>
               </div>
             </div>
-
             <div className="flex items-center gap-4 w-full md:w-auto overflow-x-auto">
               <div className="flex items-center bg-gray-800 border border-gray-700 rounded-lg p-1">
-                 <button onClick={() => handleMonthChange(-1)} className="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded"><ChevronLeft size={16} /></button>
-                 <div className="px-3 text-sm font-bold text-white flex items-center gap-2 min-w-[140px] justify-center select-none">
-                    <Calendar size={14} className="text-blue-500 mb-0.5" />
-                    <span className="capitalize">{selectedMonthName} {selectedYear}</span>
-                 </div>
-                 <button onClick={() => handleMonthChange(1)} className="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded"><ChevronRight size={16} /></button>
+                 <button onClick={() => handleMonthChange(-1)} className="p-1 text-gray-400 hover:text-white"><ChevronLeft size={16} /></button>
+                 <div className="px-3 text-sm font-bold text-white min-w-[140px] text-center capitalize">{selectedMonthName} {selectedYear}</div>
+                 <button onClick={() => handleMonthChange(1)} className="p-1 text-gray-400 hover:text-white"><ChevronRight size={16} /></button>
               </div>
-
               <nav className="flex bg-gray-800 rounded-lg p-1">
                 <TabButton active={activeTab === ActiveTab.INPUT} onClick={() => setActiveTab(ActiveTab.INPUT)} icon={<Wallet size={18} />} label="Entradas" />
                 <TabButton active={activeTab === ActiveTab.MANAGEMENT} onClick={() => setActiveTab(ActiveTab.MANAGEMENT)} icon={<Receipt size={18} />} label="Gerenciamento" />
                 <TabButton active={activeTab === ActiveTab.DASHBOARD} onClick={() => setActiveTab(ActiveTab.DASHBOARD)} icon={<TrendingUp size={18} />} label="Fluxo" />
-                {currentUser.role === 'ADMIN' && (
-                  <TabButton active={activeTab === ActiveTab.USERS} onClick={() => setActiveTab(ActiveTab.USERS)} icon={<Shield size={18} />} label="Usuários" />
-                )}
+                {currentUser.role === 'ADMIN' && <TabButton active={activeTab === ActiveTab.USERS} onClick={() => setActiveTab(ActiveTab.USERS)} icon={<Shield size={18} />} label="Usuários" />}
               </nav>
-
-              <button onClick={handleLogout} className="p-2 text-red-400 hover:bg-red-900/20 rounded-lg transition-colors" title="Sair">
-                <LogOut size={20} />
-              </button>
+              <button onClick={handleLogout} className="p-2 text-red-400 hover:bg-red-900/20 rounded-lg"><LogOut size={20} /></button>
             </div>
           </div>
         </div>
       </header>
-      
-      {showConnectionSuccess && (
-         <div className="bg-green-600/90 text-white text-center py-1.5 text-xs font-bold animate-fade-in-up flex justify-center items-center gap-2 sticky top-[73px] z-40 backdrop-blur-sm">
-            <CheckCircle2 size={14} /> Conectado com Sucesso!
-         </div>
-      )}
-
       <main className="container mx-auto px-4 py-8 flex flex-col gap-8">
-        {!aiProvider && (
-          <div className="bg-purple-900/20 border border-purple-800/50 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 animate-fade-in-up">
-            <div className="flex items-center gap-3">
-              <Sparkles className="text-purple-400 shrink-0" size={24} />
-              <div>
-                <p className="text-sm font-bold text-white">Potencialize seu sistema com Inteligência Artificial!</p>
-                <p className="text-xs text-gray-400">Configure sua Chave API do Gemini ou ChatGPT para categorização automática e análise inteligente.</p>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => setIsAiModalOpen(true)} className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-lg transition-all">
-                Configurar IA Agora
-              </button>
-            </div>
-          </div>
-        )}
-
-        {activeTab !== ActiveTab.DASHBOARD && activeTab !== ActiveTab.USERS && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <SummaryCard title={`Recebido (${selectedMonthName})`} value={formatCurrency(monthIncome)} colorClass="bg-gradient-to-br from-green-800 to-green-900 border border-green-700" icon={<TrendingUp size={24} className="text-green-300"/>} />
-            <SummaryCard title={`Pago (${selectedMonthName})`} value={formatCurrency(monthExpense - pendingExpense)} colorClass="bg-gradient-to-br from-red-800 to-red-900 border border-red-700" icon={<TrendingDown size={24} className="text-red-300"/>} />
-            <SummaryCard title={`A Pagar (${selectedMonthName})`} value={formatCurrency(pendingExpense)} colorClass="bg-gradient-to-br from-orange-800 to-orange-900 border border-orange-700" icon={<Receipt size={24} className="text-orange-300"/>} />
-            <SummaryCard title={`Saldo (${selectedMonthName})`} value={formatCurrency(monthIncome - monthExpense)} colorClass={`bg-gradient-to-br border ${monthIncome - monthExpense >= 0 ? 'from-blue-800 to-blue-900 border-blue-700' : 'from-gray-700 to-gray-800 border-gray-600'}`} icon={<DollarSign size={24} className="text-blue-300"/>} />
-          </div>
-        )}
-
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <SummaryCard title="Recebido" value={formatCurrency(monthIncome)} colorClass="bg-gradient-to-br from-green-800 to-green-900 border border-green-700" icon={<TrendingUp size={24} />} />
+            <SummaryCard title="Pago" value={formatCurrency(monthExpense - pendingExpense)} colorClass="bg-gradient-to-br from-red-800 to-red-900 border border-red-700" icon={<TrendingDown size={24} />} />
+            <SummaryCard title="A Pagar" value={formatCurrency(pendingExpense)} colorClass="bg-gradient-to-br from-orange-800 to-orange-900 border border-orange-700" icon={<Receipt size={24} />} />
+            <SummaryCard title="Saldo" value={formatCurrency(monthIncome - monthExpense)} colorClass="bg-gradient-to-br from-blue-800 to-blue-900 border border-blue-700" icon={<DollarSign size={24} />} />
+        </div>
         <div className="transition-opacity duration-300">
-          {activeTab === ActiveTab.INPUT && (
-            <div className="space-y-6 animate-fade-in-up">
-              <TransactionForm 
-                onAddTransaction={handleAddTransactions} 
-                incomeCategories={categories.income}
-                expenseCategories={categories.expense}
-                onAddCategory={handleAddCategory}
-                onRenameCategory={handleRenameCategory}
-                onDeleteCategory={handleDeleteCategory}
-                units={units}
-                onAddUnit={() => {}} 
-                onRenameUnit={() => {}} 
-                onDeleteUnit={() => {}} 
-                lastTransaction={lastTransaction}
-                existingTransactions={transactions}
-              />
-            </div>
-          )}
-
-          {activeTab === ActiveTab.MANAGEMENT && (
-            <div className="animate-fade-in-up">
-               <TransactionTable 
-                  transactions={transactions} 
-                  onDelete={handleDeleteTransaction}
-                  onDeleteMany={handleDeleteTransactions}
-                  onUpdate={handleUpdateTransaction}
-                  units={units}
-                  incomeCategories={categories.income}
-                  expenseCategories={categories.expense}
-               />
-            </div>
-          )}
-
-          {activeTab === ActiveTab.DASHBOARD && (
-            <div className="animate-fade-in-up">
-              <Dashboard transactions={transactions} units={units} />
-            </div>
-          )}
-
-          {activeTab === ActiveTab.USERS && currentUser.role === 'ADMIN' && (
-            <UserManagement availableUnits={units} />
-          )}
+          {activeTab === ActiveTab.INPUT && <TransactionForm onAddTransaction={handleAddTransactions} incomeCategories={categories.income} expenseCategories={categories.expense} onAddCategory={handleAddCategory} onRenameCategory={handleRenameCategory} onDeleteCategory={handleDeleteCategory} units={units} onAddUnit={() => {}} onRenameUnit={() => {}} onDeleteUnit={() => {}} lastTransaction={lastTransaction} existingTransactions={transactions} />}
+          {activeTab === ActiveTab.MANAGEMENT && <TransactionTable transactions={transactions} onDelete={handleDeleteTransaction} onDeleteMany={handleDeleteTransactions} onUpdate={handleUpdateTransaction} units={units} incomeCategories={categories.income} expenseCategories={categories.expense} />}
+          {activeTab === ActiveTab.DASHBOARD && <Dashboard transactions={transactions} units={units} />}
+          {activeTab === ActiveTab.USERS && currentUser.role === 'ADMIN' && <UserManagement availableUnits={units} />}
         </div>
       </main>
-      
       <AiConfigModal isOpen={isAiModalOpen} onClose={() => setIsAiModalOpen(false)} onSave={checkAiStatus} />
       <ConfirmModal isOpen={confirmModal.isOpen} title={confirmModal.title} message={confirmModal.message} onConfirm={handleConfirmAction} onCancel={closeConfirm} />
     </div>
@@ -586,10 +400,7 @@ const App: React.FC = () => {
 };
 
 const TabButton: React.FC<{ active: boolean; onClick: () => void; icon: React.ReactNode; label: string }> = ({ active, onClick, icon, label }) => (
-  <button type="button" onClick={onClick} className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 whitespace-nowrap ${active ? 'bg-blue-600 text-white shadow-lg transform scale-105' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}>
-    {icon}
-    <span className="hidden sm:inline">{label}</span>
-  </button>
+  <button type="button" onClick={onClick} className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all ${active ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}>{icon}<span className="hidden sm:inline">{label}</span></button>
 );
 
 export default App;
