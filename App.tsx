@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   category text,
   date text,
   status text,
+  reviewed boolean DEFAULT false,
   installments_current integer,
   installments_total integer,
   created_at timestamptz DEFAULT now()

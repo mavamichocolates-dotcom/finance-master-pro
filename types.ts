@@ -1,3 +1,4 @@
+
 export enum TransactionType {
   INCOME = 'INCOME',
   EXPENSE = 'EXPENSE',
@@ -16,6 +17,7 @@ export interface Transaction {
   category: string;
   date: string; // ISO Date string YYYY-MM-DD
   status: PaymentStatus;
+  reviewed?: boolean; // Indica se o usuário validou manualmente
   installments?: {
     current: number;
     total: number;

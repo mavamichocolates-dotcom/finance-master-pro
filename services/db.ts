@@ -1,3 +1,4 @@
+
 import { supabase, isSupabaseConfigured } from '../src/supabase';
 import { Transaction, User, UserRole, TransactionType, PaymentStatus } from '../types';
 import { SINGLE_STORE_NAME } from '../constants';
@@ -25,6 +26,7 @@ interface DBTransaction {
   category: string;
   date: string;
   status: PaymentStatus;
+  reviewed: boolean;
   installments_current: number | null;
   installments_total: number | null;
   created_at: string;
@@ -225,6 +227,7 @@ class DBService {
       category: t.category,
       date: t.date,
       status: t.status,
+      reviewed: t.reviewed || false,
       installments: (t.installments_current && t.installments_total) ? {
         current: t.installments_current,
         total: t.installments_total
@@ -260,6 +263,7 @@ class DBService {
       category: fixedTransaction.category,
       date: fixedTransaction.date,
       status: fixedTransaction.status,
+      reviewed: fixedTransaction.reviewed || false,
       installments_current: fixedTransaction.installments?.current || null,
       installments_total: fixedTransaction.installments?.total || null
     };
@@ -296,6 +300,7 @@ class DBService {
       category: t.category,
       date: t.date,
       status: t.status,
+      reviewed: t.reviewed || false
     };
 
     const { error } = await supabase

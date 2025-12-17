@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Transaction, TransactionType, PaymentStatus } from '../types';
 import { formatCurrency, formatDate } from '../utils';
-import { Trash2, Edit, Search, Download, Calendar, FilterX, List as ListIcon, Sparkles } from 'lucide-react';
+import { Trash2, Edit, Search, Download, Calendar, FilterX, List as ListIcon, Sparkles, CheckCircle, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { aiService } from '../services/ai';
 
 interface TransactionTableProps {
@@ -28,6 +28,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   const [filterType, setFilterType] = useState<'ALL' | TransactionType>('ALL');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [showOnlyPending, setShowOnlyPending] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const filteredTransactions = transactions.filter((t) => {
@@ -37,7 +38,12 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
     let matchesDate = true;
     if (startDate) matchesDate = matchesDate && t.date >= startDate;
     if (endDate) matchesDate = matchesDate && t.date <= endDate;
-    return matchesSearch && matchesType && matchesDate;
+    
+    // Filtro de pendências: ou categoria é 'Outros' ou não foi revisado
+    const isPending = !t.reviewed || t.category === 'Outros';
+    const matchesPending = !showOnlyPending || isPending;
+
+    return matchesSearch && matchesType && matchesDate && matchesPending;
   }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -53,22 +59,32 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   };
 
   const handleQuickCategoryChange = (t: Transaction, newCategory: string) => {
-    // VERDADE ABSOLUTA: O sistema aprende agora para aplicar em todos os futuros
+    // APRENDIZADO IMEDIATO: O sistema memoriza agora
     aiService.learn(t.description, newCategory);
-    onUpdate({ ...t, category: newCategory });
+    
+    // VERDADE ABSOLUTA: Marca como revisado automaticamente ao trocar de categoria (exceto se for para 'Outros')
+    onUpdate({ 
+      ...t, 
+      category: newCategory, 
+      reviewed: newCategory !== 'Outros' 
+    });
   };
 
   const handleQuickStatusChange = (t: Transaction, newStatus: PaymentStatus) => {
     onUpdate({ ...t, status: newStatus });
   };
 
+  const toggleReviewStatus = (t: Transaction) => {
+     onUpdate({ ...t, reviewed: !t.reviewed });
+  };
+
   const handleExportCSV = () => {
     if (filteredTransactions.length === 0) return;
-    const headers = ["ID", "Data", "Tipo", "Categoria", "Descrição", "Valor", "Status", "Unidade"];
+    const headers = ["ID", "Data", "Tipo", "Categoria", "Descrição", "Valor", "Status", "Revisado"];
     const csvContent = [
       headers.join(","),
       ...filteredTransactions.map(t => [
-        t.id, t.date, t.type, `"${t.category}"`, `"${t.description}"`, t.amount.toFixed(2), t.status, `"${t.unit || ''}"`
+        t.id, t.date, t.type, `"${t.category}"`, `"${t.description}"`, t.amount.toFixed(2), t.status, t.reviewed ? 'SIM' : 'NÃO'
       ].join(","))
     ].join("\n");
     const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -85,10 +101,19 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
     <div className="bg-gray-800 rounded-lg shadow-xl border border-gray-700 flex flex-col h-[750px]">
       <div className="p-4 border-b border-gray-700 flex flex-col gap-4 bg-gray-900 rounded-t-lg">
         <div className="flex justify-between items-center">
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <ListIcon className="text-blue-500" size={24} />
-            Gerenciamento de Lançamentos
-          </h2>
+          <div className="flex items-center gap-4">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <ListIcon className="text-blue-500" size={24} />
+              Gerenciamento de Lançamentos
+            </h2>
+            <button 
+              onClick={() => setShowOnlyPending(!showOnlyPending)}
+              className={`flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold uppercase transition-all border ${showOnlyPending ? 'bg-orange-500/20 border-orange-500 text-orange-400' : 'bg-gray-800 border-gray-600 text-gray-500 hover:text-white'}`}
+            >
+              {showOnlyPending ? <Eye size={12} /> : <EyeOff size={12} />}
+              {showOnlyPending ? 'Mostrando Apenas Pendentes' : 'Filtrar Pendentes'}
+            </button>
+          </div>
           <div className="flex gap-2">
             {selectedIds.size > 0 && (
               <button onClick={() => { onDeleteMany(Array.from(selectedIds)); setSelectedIds(new Set()); }} className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-lg flex items-center gap-2">
@@ -119,7 +144,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
             </select>
           </div>
           <div className="md:col-span-1 flex justify-center">
-             <button onClick={() => { setSearchTerm(''); setFilterType('ALL'); setStartDate(''); setEndDate(''); }} className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full"><FilterX size={18} /></button>
+             <button onClick={() => { setSearchTerm(''); setFilterType('ALL'); setStartDate(''); setEndDate(''); setShowOnlyPending(false); }} className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full"><FilterX size={18} /></button>
           </div>
         </div>
       </div>
@@ -136,12 +161,13 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
               <th className="px-4 py-3">Categoria</th>
               <th className="px-4 py-3">Valor</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3 text-center">Status de Revisão</th>
               <th className="px-4 py-3 text-center">Ações</th>
             </tr>
           </thead>
           <tbody>
             {filteredTransactions.map((t) => (
-              <tr key={t.id} className={`border-b border-gray-700 transition-colors group ${selectedIds.has(t.id) ? 'bg-blue-900/20' : 'hover:bg-gray-700/50'}`}>
+              <tr key={t.id} className={`border-b border-gray-700 transition-colors group ${selectedIds.has(t.id) ? 'bg-blue-900/20' : 'hover:bg-gray-700/50'} ${(!t.reviewed || t.category === 'Outros') ? 'bg-orange-950/5' : ''}`}>
                 <td className="px-4 py-3 text-center">
                   <input type="checkbox" className="w-4 h-4 rounded border-gray-600 text-blue-600 bg-gray-800" checked={selectedIds.has(t.id)} onChange={() => handleSelectOne(t.id)} />
                 </td>
@@ -152,7 +178,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                     <select
                       value={t.category}
                       onChange={(e) => handleQuickCategoryChange(t, e.target.value)}
-                      className={`bg-gray-900/50 border border-gray-700 text-gray-300 py-1 px-2 rounded text-xs focus:border-blue-500 outline-none w-full max-w-[150px] cursor-pointer transition-colors ${t.category !== 'Outros' ? 'border-blue-900/50 text-blue-300' : ''}`}
+                      className={`bg-gray-900/50 border border-gray-700 text-gray-300 py-1 px-2 rounded text-xs focus:border-blue-500 outline-none w-full max-w-[150px] cursor-pointer transition-colors ${t.reviewed ? 'border-green-900/50 text-green-300' : 'border-orange-900/50 text-orange-300'}`}
                     >
                       {(t.type === TransactionType.INCOME ? incomeCategories : expenseCategories).map(cat => (
                         <option key={cat} value={cat}>{cat}</option>
@@ -174,6 +200,15 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                   </select>
                 </td>
                 <td className="px-4 py-3 text-center">
+                  <button 
+                    onClick={() => toggleReviewStatus(t)}
+                    className={`flex items-center gap-2 mx-auto px-3 py-1 rounded-full text-[10px] font-bold uppercase transition-all ${t.reviewed && t.category !== 'Outros' ? 'bg-green-900/20 text-green-400 border border-green-900' : 'bg-orange-900/20 text-orange-400 border border-orange-900'}`}
+                  >
+                    {t.reviewed && t.category !== 'Outros' ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
+                    {t.reviewed && t.category !== 'Outros' ? 'Revisado' : 'Pendente'}
+                  </button>
+                </td>
+                <td className="px-4 py-3 text-center">
                   <button onClick={() => onDelete(t.id)} className="p-1.5 text-red-400 hover:bg-red-600 hover:text-white rounded opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={14} /></button>
                 </td>
               </tr>
@@ -184,7 +219,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
       <div className="p-3 bg-gray-950/50 border-t border-gray-700 flex items-center justify-between text-[10px] text-gray-500 uppercase tracking-widest font-bold">
         <div className="flex items-center gap-2">
           <Sparkles size={12} className="text-purple-400" />
-          <span>O sistema aprende com suas alterações automagicamente</span>
+          <span>A IA aprende instantaneamente com cada ajuste manual seu.</span>
         </div>
         <span>Total: {filteredTransactions.length} registros</span>
       </div>
