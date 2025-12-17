@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Transaction, TransactionType, PaymentStatus } from '../types';
 import { formatCurrency, formatDate } from '../utils';
-import { Trash2, Edit, Search, Download, Calendar, FilterX, List as ListIcon } from 'lucide-react';
+import { Trash2, Edit, Search, Download, Calendar, FilterX, List as ListIcon, Sparkles } from 'lucide-react';
 import { aiService } from '../services/ai';
 
 interface TransactionTableProps {
@@ -28,7 +28,6 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   const [filterType, setFilterType] = useState<'ALL' | TransactionType>('ALL');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const filteredTransactions = transactions.filter((t) => {
@@ -54,7 +53,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   };
 
   const handleQuickCategoryChange = (t: Transaction, newCategory: string) => {
-    // APRENDIZADO AUTOMÁTICO: Sempre que o usuário muda a categoria, a IA aprende.
+    // VERDADE ABSOLUTA: O sistema aprende agora para aplicar em todos os futuros
     aiService.learn(t.description, newCategory);
     onUpdate({ ...t, category: newCategory });
   };
@@ -105,7 +104,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center bg-gray-800 p-2 rounded-lg border border-gray-700">
           <div className="md:col-span-4 relative">
             <Search className="absolute left-3 top-2.5 text-gray-500" size={16} />
-            <input type="text" placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 pr-4 py-2 bg-gray-900 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500 w-full text-sm" />
+            <input type="text" placeholder="Buscar por descrição ou categoria..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 pr-4 py-2 bg-gray-900 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500 w-full text-sm" />
           </div>
           <div className="md:col-span-4 flex gap-2 items-center">
              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full bg-gray-900 text-gray-300 border border-gray-600 rounded-lg py-2 px-2 text-xs focus:border-blue-500" />
@@ -149,15 +148,17 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                 <td className="px-4 py-3 font-medium whitespace-nowrap text-white">{formatDate(t.date)}</td>
                 <td className="px-4 py-3 truncate max-w-[200px]">{t.description}</td>
                 <td className="px-4 py-3">
-                  <select
-                    value={t.category}
-                    onChange={(e) => handleQuickCategoryChange(t, e.target.value)}
-                    className="bg-gray-900/50 border border-gray-700 text-gray-300 py-1 px-2 rounded text-xs focus:border-blue-500 outline-none w-full max-w-[150px] cursor-pointer"
-                  >
-                    {(t.type === TransactionType.INCOME ? incomeCategories : expenseCategories).map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
+                  <div className="relative flex items-center gap-2">
+                    <select
+                      value={t.category}
+                      onChange={(e) => handleQuickCategoryChange(t, e.target.value)}
+                      className={`bg-gray-900/50 border border-gray-700 text-gray-300 py-1 px-2 rounded text-xs focus:border-blue-500 outline-none w-full max-w-[150px] cursor-pointer transition-colors ${t.category !== 'Outros' ? 'border-blue-900/50 text-blue-300' : ''}`}
+                    >
+                      {(t.type === TransactionType.INCOME ? incomeCategories : expenseCategories).map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
                 </td>
                 <td className={`px-4 py-3 font-bold ${t.type === TransactionType.INCOME ? 'text-green-400' : 'text-red-400'}`}>
                   {formatCurrency(t.amount)}
@@ -179,6 +180,13 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
             ))}
           </tbody>
         </table>
+      </div>
+      <div className="p-3 bg-gray-950/50 border-t border-gray-700 flex items-center justify-between text-[10px] text-gray-500 uppercase tracking-widest font-bold">
+        <div className="flex items-center gap-2">
+          <Sparkles size={12} className="text-purple-400" />
+          <span>O sistema aprende com suas alterações automagicamente</span>
+        </div>
+        <span>Total: {filteredTransactions.length} registros</span>
       </div>
     </div>
   );

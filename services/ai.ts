@@ -10,7 +10,7 @@ interface AiConfig {
 }
 
 class AIService {
-  private HISTORY_KEY = 'fm_category_history';
+  private HISTORY_KEY = 'fm_learned_patterns';
 
   private getConfig(): AiConfig {
     const saved = localStorage.getItem('fm_ai_config');
@@ -24,30 +24,32 @@ class AIService {
   }
 
   /**
-   * Normaliza a descrição para ignorar números, datas e códigos variáveis.
-   * Ex: "Uber *1234 15/10" vira "uber"
+   * Remove números, datas, códigos e caracteres especiais para identificar o padrão puro.
    */
   private normalizeDescription(desc: string): string {
     return desc
       .toLowerCase()
-      .replace(/[0-9]/g, '') // Remove números
-      .replace(/[^\w\s]/gi, '') // Remove caracteres especiais
-      .replace(/\s+/g, ' ') // Remove espaços duplos
+      .replace(/[0-9]/g, '') // Remove todos os números
+      .replace(/[^\w\s]/gi, '') // Remove caracteres especiais/pontuação
+      .replace(/\s+/g, ' ') // Remove espaços múltiplos
       .trim();
   }
 
   /**
-   * Salva uma correção manual como "Verdade Absoluta"
+   * Registra uma escolha do usuário como Verdade Absoluta.
    */
   public learn(description: string, category: string) {
     if (!description || !category || category === 'Outros') return;
     
     const history = this.getHistory();
-    const normalized = this.normalizeDescription(description);
+    const pattern = this.normalizeDescription(description);
     
-    history[normalized] = category;
-    localStorage.setItem(this.HISTORY_KEY, JSON.stringify(history));
-    console.log(`[IA] Aprendido: "${normalized}" -> ${category}`);
+    // Só salva se o padrão for relevante (mais de 2 letras)
+    if (pattern.length > 2) {
+      history[pattern] = category;
+      localStorage.setItem(this.HISTORY_KEY, JSON.stringify(history));
+      console.log(`[IA Aprendizado] Padrão memorizado: "${pattern}" -> ${category}`);
+    }
   }
 
   private getHistory(): Record<string, string> {
@@ -57,8 +59,8 @@ class AIService {
 
   private getLearnedCategory(description: string): string | null {
     const history = this.getHistory();
-    const normalized = this.normalizeDescription(description);
-    return history[normalized] || null;
+    const pattern = this.normalizeDescription(description);
+    return history[pattern] || null;
   }
 
   private getGeminiClient(apiKey: string) {
@@ -66,57 +68,33 @@ class AIService {
     return new GoogleGenAI({ apiKey });
   }
 
-  private async callOpenAI(prompt: string, model: string, apiKey: string) {
-    if (!apiKey) throw new Error("API_KEY_MISSING");
-    
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: model || 'gpt-4o-mini',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0
-      })
-    });
-
-    if (!response.ok) return "Outros";
-    const data = await response.json();
-    return data.choices[0].message.content;
-  }
-
   async suggestCategory(description: string, type: 'INCOME' | 'EXPENSE', categories: string[]): Promise<string> {
-    // 1. PRIORIDADE MÁXIMA: Histórico Aprendido (Verdade Absoluta)
+    // 1. PRIORIDADE MÁXIMA: Verificar se já aprendi esse padrão antes
     const learned = this.getLearnedCategory(description);
-    if (learned && categories.includes(learned)) return learned;
+    if (learned && categories.includes(learned)) {
+      return learned;
+    }
 
-    // 2. IA como fallback se não houver padrão conhecido
+    // 2. IA como fallback para novos lançamentos
     const config = this.getConfig();
     const prompt = `
-      SISTEMA DE CATEGORIZAÇÃO FINANCEIRA.
-      Categorias Permitidas: ${JSON.stringify(categories)}
-      Regra: Responda APENAS o nome da categoria. Sem explicações.
-      Descrição: "${description}"
-      Tipo: ${type === 'INCOME' ? 'Receita' : 'Saída'}
+      Você é um sistema de categorização financeira determinístico.
+      Regras:
+      1. Responda APENAS o nome da categoria da lista.
+      2. Descrição: "${description}"
+      3. Categorias Permitidas: ${JSON.stringify(categories)}
+      Resposta:
     `;
 
     try {
-      let result = "";
-      if (config.provider === 'openai') {
-        result = await this.callOpenAI(prompt, config.model, config.apiKey);
-      } else {
-        const ai = this.getGeminiClient(config.apiKey);
-        const response = await ai.models.generateContent({
-          model: config.model || 'gemini-3-flash-preview',
-          contents: prompt,
-          config: { temperature: 0 }
-        });
-        result = response.text || "Outros";
-      }
-
-      const suggested = result.trim();
+      const ai = this.getGeminiClient(config.apiKey);
+      const response = await ai.models.generateContent({
+        model: config.model || 'gemini-3-flash-preview',
+        contents: prompt,
+        config: { temperature: 0.1 } // Mais determinístico
+      });
+      
+      const suggested = (response.text || "Outros").trim();
       return categories.find(c => c.toLowerCase() === suggested.toLowerCase()) || "Outros";
     } catch (error) {
       return "Outros";
@@ -126,10 +104,10 @@ class AIService {
   async classifyBulk(items: { description: string, type: string }[], allCategories: string[]) {
     const history = this.getHistory();
     
-    // Processa o que já é conhecido localmente primeiro
+    // Processa o que já é conhecido localmente (Verdade Absoluta)
     const results = items.map(item => {
-      const normalized = this.normalizeDescription(item.description);
-      const learned = history[normalized];
+      const pattern = this.normalizeDescription(item.description);
+      const learned = history[pattern];
       return {
         description: item.description,
         category: (learned && allCategories.includes(learned)) ? learned : null
@@ -139,53 +117,37 @@ class AIService {
     const pending = results.filter(r => !r.category);
     if (pending.length === 0) return results;
 
+    // IA para o que sobrou
     const config = this.getConfig();
     const prompt = `
-      Classifique as transações.
+      Classifique os lançamentos abaixo seguindo os padrões de uma doceria.
       Categorias Permitidas: ${JSON.stringify(allCategories)}
-      Transações: ${JSON.stringify(pending.map(p => p.description))}
-      Retorne APENAS um JSON: [{"description": "...", "category": "..."}]
+      Lançamentos: ${JSON.stringify(pending.map(p => p.description))}
+      Retorne um JSON: [{"description": "...", "category": "..."}]
     `;
 
     try {
-      let jsonStr = "";
-      if (config.provider === 'openai') {
-        const res = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.apiKey}` },
-          body: JSON.stringify({
-            model: config.model || 'gpt-4o-mini',
-            messages: [{ role: 'user', content: prompt }],
-            response_format: { type: "json_object" },
-            temperature: 0
-          })
-        });
-        const data = await res.json();
-        jsonStr = data.choices[0].message.content;
-      } else {
-        const ai = this.getGeminiClient(config.apiKey);
-        const response = await ai.models.generateContent({
-          model: config.model || 'gemini-3-flash-preview',
-          contents: prompt,
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  description: { type: Type.STRING },
-                  category: { type: Type.STRING },
-                },
-                required: ["description", "category"]
-              }
+      const ai = this.getGeminiClient(config.apiKey);
+      const response = await ai.models.generateContent({
+        model: config.model || 'gemini-3-flash-preview',
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                description: { type: Type.STRING },
+                category: { type: Type.STRING },
+              },
+              required: ["description", "category"]
             }
           }
-        });
-        jsonStr = response.text || "[]";
-      }
+        }
+      });
       
-      const aiResults = JSON.parse(jsonStr);
+      const aiResults = JSON.parse(response.text || "[]");
       return results.map(r => {
         if (r.category) return r;
         const aiMatch = aiResults.find((ar: any) => ar.description === r.description);
