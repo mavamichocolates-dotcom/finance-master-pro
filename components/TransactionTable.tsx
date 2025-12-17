@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Transaction, TransactionType, PaymentStatus } from '../types';
 import { formatCurrency, formatDate } from '../utils';
-import { Trash2, Edit, Search, Download, Calendar, FilterX, List as ListIcon, Sparkles, CheckCircle, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { Trash2, Edit, Search, Download, Calendar, FilterX, List as ListIcon, Sparkles, CheckCircle, AlertCircle, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import { aiService } from '../services/ai';
 
 interface TransactionTableProps {
@@ -39,8 +39,9 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
     if (startDate) matchesDate = matchesDate && t.date >= startDate;
     if (endDate) matchesDate = matchesDate && t.date <= endDate;
     
-    // Filtro de pendências: ou categoria é 'Outros' ou não foi revisado
-    const isPending = !t.reviewed || t.category === 'Outros';
+    // REGRA DE OURO: Apenas Saídas podem ser "Pendentes". 
+    // Entradas são sempre consideradas revisadas.
+    const isPending = t.type === TransactionType.EXPENSE && (!t.reviewed || t.category === 'Outros');
     const matchesPending = !showOnlyPending || isPending;
 
     return matchesSearch && matchesType && matchesDate && matchesPending;
@@ -59,14 +60,14 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   };
 
   const handleQuickCategoryChange = (t: Transaction, newCategory: string) => {
-    // APRENDIZADO IMEDIATO: O sistema memoriza agora
     aiService.learn(t.description, newCategory);
     
-    // VERDADE ABSOLUTA: Marca como revisado automaticamente ao trocar de categoria (exceto se for para 'Outros')
+    // Para saídas, atualizar a categoria pode marcar como revisado se não for 'Outros'
+    // Para entradas, continua sempre como revisado
     onUpdate({ 
       ...t, 
       category: newCategory, 
-      reviewed: newCategory !== 'Outros' 
+      reviewed: t.type === TransactionType.INCOME ? true : (newCategory !== 'Outros')
     });
   };
 
@@ -75,10 +76,9 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   };
 
   const toggleReviewStatus = (t: Transaction) => {
+     if (t.type === TransactionType.INCOME) return; // Não faz nada para entradas
+
      const nextReviewedState = !t.reviewed;
-     
-     // Se estamos marcando como REVISADO agora, e a categoria não é 'Outros', 
-     // reforçamos o aprendizado da IA para este padrão de descrição.
      if (nextReviewedState && t.category !== 'Outros') {
        aiService.learn(t.description, t.category);
      }
@@ -117,10 +117,10 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
             <button 
               onClick={() => setShowOnlyPending(!showOnlyPending)}
               className={`flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold uppercase transition-all border ${showOnlyPending ? 'bg-orange-500/20 border-orange-500 text-orange-400' : 'bg-gray-800 border-gray-600 text-gray-500 hover:text-white'}`}
-              title={showOnlyPending ? "Ver todos os lançamentos" : "Ver apenas o que ainda não foi revisado"}
+              title={showOnlyPending ? "Ver todos os lançamentos" : "Ver apenas Saídas pendentes de revisão"}
             >
               {showOnlyPending ? <Eye size={12} /> : <EyeOff size={12} />}
-              {showOnlyPending ? 'Mostrando Apenas Pendentes' : 'Filtrar Pendentes'}
+              {showOnlyPending ? 'Limpando Saídas Pendentes' : 'Filtrar Pendências'}
             </button>
           </div>
           <div className="flex gap-2">
@@ -148,8 +148,8 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
           <div className="md:col-span-3">
             <select value={filterType} onChange={(e) => setFilterType(e.target.value as any)} className="w-full bg-gray-900 text-white border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500">
               <option value="ALL">Todos os Tipos</option>
-              <option value={TransactionType.INCOME}>Entradas</option>
-              <option value={TransactionType.EXPENSE}>Saídas</option>
+              <option value={TransactionType.INCOME}>Entradas (Vendas)</option>
+              <option value={TransactionType.EXPENSE}>Saídas (Despesas)</option>
             </select>
           </div>
           <div className="md:col-span-1 flex justify-center">
@@ -176,24 +176,22 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
           </thead>
           <tbody>
             {filteredTransactions.map((t) => (
-              <tr key={t.id} className={`border-b border-gray-700 transition-all duration-200 group ${selectedIds.has(t.id) ? 'bg-blue-900/20' : 'hover:bg-gray-700/50'} ${(!t.reviewed || t.category === 'Outros') ? 'bg-orange-950/5' : ''}`}>
+              <tr key={t.id} className={`border-b border-gray-700 transition-all duration-200 group ${selectedIds.has(t.id) ? 'bg-blue-900/20' : 'hover:bg-gray-700/50'} ${(t.type === TransactionType.EXPENSE && (!t.reviewed || t.category === 'Outros')) ? 'bg-orange-950/5' : ''}`}>
                 <td className="px-4 py-3 text-center">
                   <input type="checkbox" className="w-4 h-4 rounded border-gray-600 text-blue-600 bg-gray-800" checked={selectedIds.has(t.id)} onChange={() => handleSelectOne(t.id)} />
                 </td>
                 <td className="px-4 py-3 font-medium whitespace-nowrap text-white">{formatDate(t.date)}</td>
                 <td className="px-4 py-3 truncate max-w-[200px]">{t.description}</td>
                 <td className="px-4 py-3">
-                  <div className="relative flex items-center gap-2">
-                    <select
-                      value={t.category}
-                      onChange={(e) => handleQuickCategoryChange(t, e.target.value)}
-                      className={`bg-gray-900/50 border border-gray-700 text-gray-300 py-1 px-2 rounded text-xs focus:border-blue-500 outline-none w-full max-w-[150px] cursor-pointer transition-colors ${t.reviewed && t.category !== 'Outros' ? 'border-green-900/50 text-green-300' : 'border-orange-900/50 text-orange-300'}`}
-                    >
-                      {(t.type === TransactionType.INCOME ? incomeCategories : expenseCategories).map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <select
+                    value={t.category}
+                    onChange={(e) => handleQuickCategoryChange(t, e.target.value)}
+                    className={`bg-gray-900/50 border border-gray-700 text-gray-300 py-1 px-2 rounded text-xs focus:border-blue-500 outline-none w-full max-w-[150px] cursor-pointer transition-colors ${t.type === TransactionType.INCOME || (t.reviewed && t.category !== 'Outros') ? 'border-green-900/50 text-green-300' : 'border-orange-900/50 text-orange-300'}`}
+                  >
+                    {(t.type === TransactionType.INCOME ? incomeCategories : expenseCategories).map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
                 </td>
                 <td className={`px-4 py-3 font-bold ${t.type === TransactionType.INCOME ? 'text-green-400' : 'text-red-400'}`}>
                   {formatCurrency(t.amount)}
@@ -209,14 +207,20 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                   </select>
                 </td>
                 <td className="px-4 py-3 text-center">
-                  <button 
-                    onClick={() => toggleReviewStatus(t)}
-                    className={`flex items-center gap-2 mx-auto px-3 py-1.5 rounded-full text-[10px] font-bold uppercase transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-sm border ${t.reviewed && t.category !== 'Outros' ? 'bg-green-600/20 text-green-400 border-green-600/50 hover:bg-green-600/30' : 'bg-orange-600/20 text-orange-400 border-orange-600/50 hover:bg-orange-600/30'}`}
-                    title={t.reviewed ? "Clique para marcar como Pendente" : "Clique para marcar como Revisado e ensinar a IA"}
-                  >
-                    {t.reviewed && t.category !== 'Outros' ? <CheckCircle size={14} className="animate-pulse" /> : <AlertCircle size={14} />}
-                    {t.reviewed && t.category !== 'Outros' ? 'Revisado' : 'Pendente'}
-                  </button>
+                  {t.type === TransactionType.INCOME ? (
+                    <div className="flex items-center justify-center gap-1.5 text-[10px] font-bold uppercase text-green-500/60" title="Entradas de vendas são revisadas automaticamente">
+                      <CheckCircle2 size={14} /> Confirmado
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => toggleReviewStatus(t)}
+                      className={`flex items-center gap-2 mx-auto px-3 py-1.5 rounded-full text-[10px] font-bold uppercase transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-sm border ${t.reviewed && t.category !== 'Outros' ? 'bg-green-600/20 text-green-400 border-green-600/50 hover:bg-green-600/30' : 'bg-orange-600/20 text-orange-400 border-orange-600/50 hover:bg-orange-600/30'}`}
+                      title={t.reviewed ? "Clique para marcar como Pendente" : "Clique para marcar como Revisado e ensinar a IA"}
+                    >
+                      {t.reviewed && t.category !== 'Outros' ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
+                      {t.reviewed && t.category !== 'Outros' ? 'Revisado' : 'Pendente'}
+                    </button>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-center">
                   <button onClick={() => onDelete(t.id)} className="p-1.5 text-red-400 hover:bg-red-600 hover:text-white rounded opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={14} /></button>
@@ -229,7 +233,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
       <div className="p-3 bg-gray-950/50 border-t border-gray-700 flex items-center justify-between text-[10px] text-gray-500 uppercase tracking-widest font-bold">
         <div className="flex items-center gap-2">
           <Sparkles size={12} className="text-purple-400" />
-          <span>{showOnlyPending ? "Limpando fila de pendências..." : "Clique nos selos de status para validar lançamentos."}</span>
+          <span>{showOnlyPending ? "Mostrando apenas despesas que precisam de revisão." : "As entradas de vendas são validadas automaticamente pelo sistema."}</span>
         </div>
         <span>Total exibido: {filteredTransactions.length} registros</span>
       </div>
