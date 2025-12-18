@@ -4,11 +4,14 @@ import { Transaction, User, UserRole, TransactionType, PaymentStatus } from '../
 import { SINGLE_STORE_NAME } from '../constants';
 import { generateId } from '../utils';
 
+const USERS_STORAGE_KEY = 'fm_local_users';
+const TRANSACTIONS_STORAGE_KEY = 'fm_local_transactions';
+
 class DBService {
   
   async getTransactions(): Promise<Transaction[]> {
     if (!isSupabaseConfigured) {
-      const data = localStorage.getItem('fm_local_transactions');
+      const data = localStorage.getItem(TRANSACTIONS_STORAGE_KEY);
       return data ? JSON.parse(data) : [];
     }
     
@@ -32,16 +35,16 @@ class DBService {
       unit: t.store_name, 
       userId: t.user_id, 
       createdAt: t.created_at,
-      pdvData: t.pdv_data // Mapeamento correto do JSON vindo do banco
+      pdvData: t.pdv_data
     }));
   }
 
   async addTransaction(t: Transaction): Promise<Transaction | null> {
     if (!isSupabaseConfigured) {
-      const txs = JSON.parse(localStorage.getItem('fm_local_transactions') || '[]');
+      const txs = JSON.parse(localStorage.getItem(TRANSACTIONS_STORAGE_KEY) || '[]');
       const newTx = { ...t, id: generateId(), createdAt: new Date().toISOString() };
       txs.push(newTx);
-      localStorage.setItem('fm_local_transactions', JSON.stringify(txs));
+      localStorage.setItem(TRANSACTIONS_STORAGE_KEY, JSON.stringify(txs));
       return newTx;
     }
 
@@ -56,7 +59,7 @@ class DBService {
       date: t.date,
       status: t.status,
       reviewed: !!t.reviewed,
-      pdv_data: t.pdvData // Persistência do objeto de metadados do PDV
+      pdv_data: t.pdvData
     };
 
     const { data, error } = await supabase.from('transactions').insert(dbTx).select().single();
@@ -66,9 +69,9 @@ class DBService {
 
   async updateTransaction(t: Transaction): Promise<void> {
     if (!isSupabaseConfigured) {
-      const txs = JSON.parse(localStorage.getItem('fm_local_transactions') || '[]');
+      const txs = JSON.parse(localStorage.getItem(TRANSACTIONS_STORAGE_KEY) || '[]');
       const index = txs.findIndex((x: any) => x.id === t.id);
-      if (index !== -1) { txs[index] = t; localStorage.setItem('fm_local_transactions', JSON.stringify(txs)); }
+      if (index !== -1) { txs[index] = t; localStorage.setItem(TRANSACTIONS_STORAGE_KEY, JSON.stringify(txs)); }
       return;
     }
 
@@ -89,8 +92,8 @@ class DBService {
 
   async deleteTransaction(id: string): Promise<void> {
     if (!isSupabaseConfigured) {
-      const txs = JSON.parse(localStorage.getItem('fm_local_transactions') || '[]');
-      localStorage.setItem('fm_local_transactions', JSON.stringify(txs.filter((t: any) => t.id !== id)));
+      const txs = JSON.parse(localStorage.getItem(TRANSACTIONS_STORAGE_KEY) || '[]');
+      localStorage.setItem(TRANSACTIONS_STORAGE_KEY, JSON.stringify(txs.filter((t: any) => t.id !== id)));
       return;
     }
     const { error } = await supabase.from('transactions').delete().eq('id', id);
@@ -98,29 +101,48 @@ class DBService {
   }
 
   async getUsers(): Promise<User[]> {
-    if (!isSupabaseConfigured) return [];
+    if (!isSupabaseConfigured) {
+      const data = localStorage.getItem(USERS_STORAGE_KEY);
+      return data ? JSON.parse(data) : [];
+    }
     const { data, error } = await supabase.from('app_users').select('*');
     if (error) return [];
     return (data || []).map(u => ({
-      id: u.id, name: u.name, email: u.email, role: u.role, allowedUnits: [], active: u.active, createdAt: u.created_at
+      id: u.id, name: u.name, email: u.email, role: u.role, allowedUnits: u.allowed_units || [], active: u.active, createdAt: u.created_at
     }));
   }
 
   async findUserByIdentifier(id: string): Promise<User | null> {
-    if (!isSupabaseConfigured) return null;
+    if (!isSupabaseConfigured) {
+      const users = JSON.parse(localStorage.getItem(USERS_STORAGE_KEY) || '[]');
+      return users.find((u: User) => u.email === id || u.name === id) || null;
+    }
     const { data, error } = await supabase.from('app_users').select('*').or(`email.eq.${id},name.eq.${id}`).single();
     if (error || !data) return null;
-    return { id: data.id, name: data.name, email: data.email, role: data.role, allowedUnits: [], active: data.active, createdAt: data.created_at, passwordHash: data.password_hash };
+    return { id: data.id, name: data.name, email: data.email, role: data.role, allowedUnits: data.allowed_units || [], active: data.active, createdAt: data.created_at, passwordHash: data.password_hash };
   }
 
   async saveUser(u: User): Promise<void> {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured) {
+      const users = JSON.parse(localStorage.getItem(USERS_STORAGE_KEY) || '[]');
+      if (u.id) {
+        const index = users.findIndex((x: any) => x.id === u.id);
+        if (index !== -1) users[index] = u;
+      } else {
+        const newUser = { ...u, id: generateId(), createdAt: new Date().toISOString() };
+        users.push(newUser);
+      }
+      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+      return;
+    }
+
     const dbUser = {
       name: u.name,
       email: u.email,
       role: u.role,
       active: u.active,
-      password_hash: u.passwordHash
+      password_hash: u.passwordHash,
+      allowed_units: u.allowedUnits
     };
     if (u.id) {
       await supabase.from('app_users').update(dbUser).eq('id', u.id);
@@ -130,19 +152,24 @@ class DBService {
   }
 
   async deleteUser(id: string): Promise<void> {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured) {
+      const users = JSON.parse(localStorage.getItem(USERS_STORAGE_KEY) || '[]');
+      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users.filter((u: any) => u.id !== id)));
+      return;
+    }
     await supabase.from('app_users').delete().eq('id', id);
   }
 
   async clearAllData(): Promise<void> {
-    localStorage.removeItem('fm_local_transactions');
+    localStorage.removeItem(TRANSACTIONS_STORAGE_KEY);
+    localStorage.removeItem(USERS_STORAGE_KEY);
     localStorage.removeItem('fm_baseline_balance');
     localStorage.removeItem('finance_categories');
     localStorage.removeItem('fm_learned_patterns');
 
     if (isSupabaseConfigured) {
-      const { error: txError } = await supabase.from('transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      if (txError) console.error("Erro ao limpar transações na nuvem", txError);
+      await supabase.from('transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('app_users').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     }
   }
 
