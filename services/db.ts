@@ -127,7 +127,11 @@ class DBService {
       const users = JSON.parse(localStorage.getItem(USERS_STORAGE_KEY) || '[]');
       if (u.id) {
         const index = users.findIndex((x: any) => x.id === u.id);
-        if (index !== -1) users[index] = u;
+        if (index !== -1) {
+          // Se estiver editando localmente, preserva a senha antiga se a nova estiver vazia
+          const oldPass = users[index].passwordHash;
+          users[index] = { ...u, passwordHash: u.passwordHash || oldPass };
+        }
       } else {
         const newUser = { ...u, id: generateId(), createdAt: new Date().toISOString() };
         users.push(newUser);
@@ -136,18 +140,27 @@ class DBService {
       return;
     }
 
-    const dbUser = {
+    const dbUser: any = {
       name: u.name,
       email: u.email,
       role: u.role,
       active: u.active,
-      password_hash: u.passwordHash,
       allowed_units: u.allowedUnits
     };
+
+    // Apenas atualiza a senha se ela foi preenchida (evita sobrescrever com vazio)
+    if (u.passwordHash) {
+      dbUser.password_hash = u.passwordHash;
+    }
+
     if (u.id) {
-      await supabase.from('app_users').update(dbUser).eq('id', u.id);
+      const { error } = await supabase.from('app_users').update(dbUser).eq('id', u.id);
+      if (error) throw error;
     } else {
-      await supabase.from('app_users').insert(dbUser);
+      // Garante que novos usuários tenham um ID gerado se o banco não o fizer automaticamente
+      dbUser.id = generateId();
+      const { error } = await supabase.from('app_users').insert(dbUser);
+      if (error) throw error;
     }
   }
 

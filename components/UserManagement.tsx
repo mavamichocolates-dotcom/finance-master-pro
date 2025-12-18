@@ -15,6 +15,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<Partial<User>>({});
+  const [showSuccess, setShowSuccess] = useState(false);
   
   // Confirm Modal State
   const [confirmConfig, setConfirmConfig] = useState<{isOpen: boolean, action: () => void}>({
@@ -115,7 +116,13 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
       } as User;
 
       await db.saveUser(userData);
-      setIsModalOpen(false);
+      
+      setShowSuccess(true);
+      setTimeout(() => {
+        setShowSuccess(false);
+        setIsModalOpen(false);
+      }, 1500);
+      
       await loadUsers();
     } catch (error: any) {
       console.error("Erro ao salvar usuário:", error);
@@ -319,6 +326,12 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
             </div>
 
             <form onSubmit={handleSave} className="p-6 overflow-y-auto custom-scrollbar space-y-6">
+              {showSuccess && (
+                <div className="bg-emerald-500/10 border border-emerald-500/30 p-4 rounded-lg flex items-center gap-2 text-emerald-400 text-sm font-bold uppercase animate-fade-in-up">
+                  <CheckCircle2 size={18} /> Usuário salvo com sucesso!
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Nome de Login</label>
@@ -328,7 +341,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
                     value={editingUser.name || ''}
                     onChange={e => setEditingUser({...editingUser, name: e.target.value})}
                     className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 text-white focus:border-blue-500 outline-none"
-                    placeholder="Ex: Pedro"
+                    placeholder="Ex: Hare"
                   />
                 </div>
                 <div>
@@ -339,7 +352,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
                     value={editingUser.email || ''}
                     onChange={e => setEditingUser({...editingUser, email: e.target.value})}
                     className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 text-white focus:border-blue-500 outline-none"
-                    placeholder="pedro@email.com"
+                    placeholder="hare@email.com"
                   />
                 </div>
                 <div>
@@ -387,7 +400,9 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
 
               <div className="flex justify-end gap-3 pt-4">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 text-gray-400 font-bold uppercase text-xs">Cancelar</button>
-                <button type="submit" className="px-10 py-3 bg-blue-600 hover:bg-blue-500 text-white font-black uppercase text-xs rounded-xl shadow-lg">Salvar Usuário</button>
+                <button type="submit" disabled={loading} className="px-10 py-3 bg-blue-600 hover:bg-blue-500 text-white font-black uppercase text-xs rounded-xl shadow-lg disabled:opacity-50">
+                  {loading ? 'Salvando...' : 'Salvar Usuário'}
+                </button>
               </div>
             </form>
           </div>
