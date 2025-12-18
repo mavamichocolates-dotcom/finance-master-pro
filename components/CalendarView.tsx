@@ -48,9 +48,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({ transactions }) => {
     const map: Record<string, Transaction[]> = {};
     
     transactions.forEach(t => {
-      // REGRA: Prioridade para data de entrega (deliveryDate), senão usa a data do lançamento (date)
-      // Garantimos que pegamos apenas os 10 primeiros caracteres YYYY-MM-DD
-      const rawDate = (t.pdvData?.deliveryDate || t.date || '').substring(0, 10);
+      // Prioriza a data de entrega (deliveryDate) vinda do PDV
+      const deliveryDate = t.pdvData?.deliveryDate || t.date;
+      const rawDate = deliveryDate.substring(0, 10);
       
       if (rawDate) {
         if (!map[rawDate]) map[rawDate] = [];
@@ -77,12 +77,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({ transactions }) => {
             </div>
             <div>
               <h2 className="text-2xl font-black text-white capitalize tracking-tighter">{MONTH_NAMES[month]} {year}</h2>
-              <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Agenda Mirella Doces</p>
+              <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Agenda de Entregas Mirella Doces</p>
             </div>
           </div>
           <div className="flex gap-2">
             <button onClick={handlePrevMonth} className="p-2.5 hover:bg-gray-800 rounded-xl text-gray-400 hover:text-white transition-all border border-gray-700 shadow-sm"><ChevronLeft size={20} /></button>
-            <button onClick={() => { setCurrentDate(new Date()); setSelectedDay(todayStr); }} className="px-5 py-2.5 text-[10px] font-black text-gray-400 hover:text-white hover:bg-gray-800 rounded-xl border border-gray-700 uppercase tracking-widest transition-all">Hoje</button>
+            <button onClick={() => { setCurrentDate(new Date()); setSelectedDay(todayStr); }} className="px-5 py-2.5 text-[10px] font-black text-gray-400 hover:text-white hover:bg-gray-800 rounded-xl border border-gray-700 uppercase tracking-widest transition-all">Ir para Hoje</button>
             <button onClick={handleNextMonth} className="p-2.5 hover:bg-gray-800 rounded-xl text-gray-400 hover:text-white transition-all border border-gray-700 shadow-sm"><ChevronRight size={20} /></button>
           </div>
         </div>
@@ -115,8 +115,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({ transactions }) => {
                     {d.day}
                   </span>
                   {dayOrders.length > 0 && (
-                    <span className="bg-emerald-500 text-gray-950 text-[10px] font-black px-2 py-0.5 rounded-lg shadow-sm">
-                      {dayOrders.length}
+                    <span className="bg-emerald-500 text-gray-950 text-[10px] font-black px-2 py-0.5 rounded-lg shadow-sm animate-pulse">
+                      {dayOrders.length} {dayOrders.length === 1 ? 'PEDIDO' : 'PEDIDOS'}
                     </span>
                   )}
                 </div>
@@ -128,7 +128,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ transactions }) => {
                     </div>
                   ))}
                   {dayOrders.length > 3 && (
-                    <div className="text-[8px] text-gray-500 font-black pl-1.5 uppercase">+{dayOrders.length - 3} mais...</div>
+                    <div className="text-[8px] text-gray-500 font-black pl-1.5 uppercase">+{dayOrders.length - 3} itens</div>
                   )}
                 </div>
               </div>
@@ -142,13 +142,13 @@ const CalendarView: React.FC<CalendarViewProps> = ({ transactions }) => {
           <div className="p-6 border-b border-gray-700 bg-gray-900/50 flex justify-between items-center">
             <div>
               <h3 className="text-base font-black text-white uppercase tracking-tighter">
-                {selectedDay ? formatDate(selectedDay) : 'Selecione'}
+                {selectedDay ? formatDate(selectedDay) : 'Dia Selecionado'}
               </h3>
-              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Detalhamento</p>
+              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Detalhamento das Encomendas</p>
             </div>
             {selectedDay && selectedDayOrders.length > 0 && (
               <div className="bg-blue-600/20 text-blue-400 text-[10px] font-black px-4 py-1.5 rounded-2xl border border-blue-500/30">
-                {selectedDayOrders.length} PEDIDOS
+                {selectedDayOrders.length} ENTREGAS
               </div>
             )}
           </div>
@@ -157,7 +157,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ transactions }) => {
             {!selectedDay || selectedDayOrders.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-gray-500 italic text-sm gap-6 py-24 opacity-40">
                 <div className="bg-gray-900 p-6 rounded-full border border-gray-700"><Info size={48} /></div>
-                <p className="text-center font-bold uppercase tracking-widest text-xs">Nenhum pedido ou entrega agendada para este dia</p>
+                <p className="text-center font-bold uppercase tracking-widest text-xs">Nenhuma encomenda registrada para esta data.</p>
               </div>
             ) : (
               selectedDayOrders.map((order) => (
@@ -186,7 +186,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ transactions }) => {
                     )}
                     <div className="flex items-center gap-3 text-xs text-gray-400">
                       <Clock size={14} className="text-orange-500" />
-                      <span className="font-bold">Entrega: {formatDate(order.pdvData?.deliveryDate || order.date)}</span>
+                      <span className="font-bold">Hora/Ref: Lançado em {formatDate(order.date)}</span>
                     </div>
                   </div>
 
@@ -194,7 +194,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ transactions }) => {
                     <span className={`text-[9px] font-black uppercase px-3 py-1 rounded-lg border shadow-sm ${
                       order.status === 'PAID' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
                     }`}>
-                      {order.status === 'PAID' ? 'PAGO' : 'PENDENTE'}
+                      {order.status === 'PAID' ? 'CONCLUÍDO' : 'PENDENTE'}
                     </span>
                     {order.pdvData?.paymentMethod && (
                       <span className="text-[9px] text-gray-500 font-black uppercase tracking-widest bg-gray-900 px-2 py-1 rounded-md">{order.pdvData.paymentMethod}</span>
@@ -205,19 +205,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({ transactions }) => {
             )}
           </div>
         </div>
-
-        {selectedDay && selectedDayOrders.length > 0 && (
-          <div className="bg-gradient-to-br from-indigo-600 to-blue-700 p-8 rounded-[2rem] shadow-2xl relative overflow-hidden group">
-            <TrendingUp size={120} className="absolute -right-8 -bottom-8 text-white/5 group-hover:scale-110 transition-transform" />
-            <h4 className="text-[11px] font-black text-white/60 uppercase tracking-widest mb-1 relative z-10">Total do Dia Selecionado</h4>
-            <div className="text-4xl font-black text-white relative z-10 tracking-tighter">
-              {formatCurrency(selectedDayOrders.reduce((sum, o) => sum + o.amount, 0))}
-            </div>
-            <div className="mt-3 flex items-center gap-2 text-[10px] text-white/80 font-black uppercase relative z-10">
-               <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" /> {selectedDayOrders.length} encomendas confirmadas
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

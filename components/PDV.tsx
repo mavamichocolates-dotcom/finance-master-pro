@@ -3,13 +3,12 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Transaction, TransactionType, PaymentStatus } from '../types';
 import { generateId, getTodayString, formatCurrency, formatDate } from '../utils';
 import { aiService, GroundingSource } from '../services/ai';
-// Fixed: Added missing Sparkles icon import from lucide-react
 import { 
   Save, ShoppingCart, User, MapPin, Tag, Package, CreditCard, 
   Plus, Trash2, Search, TrendingUp, 
   Calendar, Settings2, X, BarChart3, ReceiptText, Printer, CheckCircle2,
   TrendingDown, Percent, MapPinned, Route, Map as MapIcon, Loader2, ExternalLink,
-  ChevronRight, Info, Sparkles
+  ChevronRight, Info, Sparkles, Clock
 } from 'lucide-react';
 
 interface PDVProps {
@@ -52,6 +51,7 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
   const [discount, setDiscount] = useState('');
   
   const [showSuccess, setShowSuccess] = useState(false);
+  const [lastSavedDate, setLastSavedDate] = useState('');
   const [isCatalogModalOpen, setIsCatalogModalOpen] = useState(false);
   
   // Estados de Logística IA
@@ -80,36 +80,35 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
 
   const pdvTransactions = useMemo(() => {
     return existingTransactions.filter(t => 
-      t.type === TransactionType.INCOME || 
-      t.pdvData || 
-      t.description.startsWith('PDV:')
+      t.type === TransactionType.INCOME && (t.pdvData || t.description.startsWith('PDV:'))
     );
   }, [existingTransactions]);
 
   const dailyReport = useMemo(() => {
-    const dayTxs = pdvTransactions.filter(t => t.date.substring(0, 10) === date.substring(0, 10));
+    // Vendas feitas NESTA DATA (Lançamentos)
+    const daySales = pdvTransactions.filter(t => t.date.substring(0, 10) === date.substring(0, 10));
     
-    const gross = dayTxs.reduce((s, t) => s + (Number(t.amount) || 0), 0);
-    const cost = dayTxs.reduce((s, t) => s + (Number(t.pdvData?.productCost) || 0), 0);
+    const gross = daySales.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+    const cost = daySales.reduce((s, t) => s + (Number(t.pdvData?.productCost) || 0), 0);
     
-    // Filtro para entregas agendadas (pela data de entrega)
-    const deliveriesForDate = pdvTransactions.filter(t => {
+    // Entregas agendadas PARA ESTA DATA (Logística)
+    const deliveriesScheduledForToday = pdvTransactions.filter(t => {
       const dDate = t.pdvData?.deliveryDate || t.date;
-      const match = dDate.substring(0, 10) === date.substring(0, 10);
-      const hasLoc = t.pdvData?.deliveryAddress || (t.pdvData?.region && t.pdvData?.region !== 'Loja / Balcão');
-      return match && hasLoc;
+      return dDate.substring(0, 10) === date.substring(0, 10);
     });
 
     return { 
         gross, cost, net: gross - cost, 
-        count: dayTxs.length,
-        deliveries: deliveriesForDate
+        salesCount: daySales.length,
+        deliveries: deliveriesScheduledForToday
     };
   }, [pdvTransactions, date]);
 
   const handleOptimizeRoutes = async () => {
-    if (dailyReport.deliveries.length === 0) {
-      alert("Nenhuma entrega externa agendada para este dia.");
+    const externalDeliveries = dailyReport.deliveries.filter(t => t.pdvData?.deliveryAddress || (t.pdvData?.region && t.pdvData?.region !== 'Loja / Balcão'));
+    
+    if (externalDeliveries.length === 0) {
+      alert("Nenhuma entrega externa (com endereço) agendada para este dia.");
       return;
     }
     
@@ -119,24 +118,11 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
     setRouteSources([]);
 
     try {
-      // Tentar pegar localização atual para ponto de partida
-      const getLocation = () => new Promise<GeolocationPosition>((res, rej) => {
-        navigator.geolocation.getCurrentPosition(res, rej);
-      });
-
-      let loc;
-      try {
-        const pos = await getLocation();
-        loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      } catch (e) {
-        console.warn("Geolocalização não permitida ou indisponível.");
-      }
-
-      const result = await aiService.optimizeDeliveryRoutes(dailyReport.deliveries, loc);
+      const result = await aiService.optimizeDeliveryRoutes(externalDeliveries);
       setRouteAnalysis(result.text);
       setRouteSources(result.sources);
     } catch (e) {
-      setRouteAnalysis("Erro ao analisar rotas. Verifique sua conexão e tente novamente.");
+      setRouteAnalysis("Erro ao analisar rotas. Verifique sua conexão.");
     } finally {
       setRouteLoading(false);
     }
@@ -144,13 +130,7 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
 
   const recentOrders = useMemo(() => {
     return [...pdvTransactions]
-      .sort((a, b) => {
-        const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
-        if (dateDiff !== 0) return dateDiff;
-        const timeA = a.createdAt || '';
-        const timeB = b.createdAt || '';
-        return timeB.localeCompare(timeA);
-      })
+      .sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime())
       .slice(0, 50);
   }, [pdvTransactions]);
 
@@ -180,8 +160,9 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
     };
 
     onAddTransaction([newTransaction]);
+    setLastSavedDate(deliveryDate);
     setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 2500);
+    setTimeout(() => setShowSuccess(false), 3000);
     
     setContact(''); 
     setRegion(''); 
@@ -197,52 +178,52 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
 
   return (
     <div className="space-y-6 animate-fade-in-up">
-      {/* DASHBOARD RÁPIDO E LOGÍSTICA */}
+      {/* HEADER DE INDICADORES LOGÍSTICOS */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        <div className="lg:col-span-1 bg-gradient-to-br from-indigo-800 to-indigo-950 p-6 rounded-[2rem] shadow-2xl text-white relative overflow-hidden group border border-indigo-500/30">
+        <div className="lg:col-span-1 bg-gradient-to-br from-indigo-700 to-blue-900 p-6 rounded-[2rem] shadow-2xl text-white relative overflow-hidden group border border-indigo-400/30">
            <Route size={140} className="absolute -right-10 -bottom-10 opacity-10 group-hover:scale-110 transition-transform rotate-12" />
            <div className="relative z-10">
-             <div className="flex items-center gap-2 mb-2 opacity-60">
-                <MapPinned size={14} />
-                <p className="text-[10px] font-black uppercase tracking-widest">Entregas de Hoje</p>
+             <div className="flex items-center gap-2 mb-2 opacity-70">
+                <Calendar size={14} />
+                <p className="text-[10px] font-black uppercase tracking-widest">Para: {formatDate(date)}</p>
              </div>
              <h2 className="text-4xl font-black mb-1">{dailyReport.deliveries.length}</h2>
-             <p className="text-xs font-medium text-indigo-300 mb-6">{dailyReport.deliveries.length === 1 ? 'Pedido agendado' : 'Pedidos agendados'}</p>
+             <p className="text-xs font-medium text-indigo-200 mb-6">Entregas/Encomendas Agendadas</p>
              <button 
                onClick={handleOptimizeRoutes}
                disabled={dailyReport.deliveries.length === 0}
-               className="w-full flex items-center justify-center gap-3 bg-indigo-500 hover:bg-indigo-400 text-white px-6 py-4 rounded-2xl transition-all font-black text-xs uppercase tracking-widest shadow-xl disabled:opacity-40 disabled:cursor-not-allowed group"
+               className="w-full flex items-center justify-center gap-3 bg-white/10 hover:bg-white/20 text-white backdrop-blur-md px-6 py-4 rounded-2xl transition-all font-black text-xs uppercase tracking-widest border border-white/20 disabled:opacity-20"
              >
-               <Sparkles size={18} className="text-yellow-300 group-hover:animate-pulse" /> Roteirizar com IA
+               <MapPinned size={18} /> Ver Logística do Dia
              </button>
            </div>
         </div>
 
         <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <ReportCard label="Receita Bruta" value={dailyReport.gross} icon={<TrendingUp size={18} className="text-emerald-400" />} />
-          <ReportCard label="Custo Unitários" value={dailyReport.cost} icon={<TrendingDown size={18} className="text-rose-400" />} isNegative />
-          <ReportCard label="Margem Líquida" value={dailyReport.net} icon={<BarChart3 size={18} className="text-blue-400" />} highlight />
+          <ReportCard label="Vendas Hoje" value={dailyReport.gross} icon={<TrendingUp size={18} className="text-emerald-400" />} />
+          <ReportCard label="Custo Previsto" value={dailyReport.cost} icon={<TrendingDown size={18} className="text-rose-400" />} isNegative />
+          <ReportCard label="Líquido do Dia" value={dailyReport.net} icon={<BarChart3 size={18} className="text-blue-400" />} highlight />
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* FORMULÁRIO PDV */}
         <div className="lg:col-span-8 bg-gray-800 border border-gray-700 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col">
           <div className="bg-gray-900/80 p-6 border-b border-gray-700 flex justify-between items-center backdrop-blur-md">
             <div className="flex items-center gap-4">
-              <div className="bg-blue-600/20 p-3 rounded-2xl border border-blue-500/30"><ShoppingCart className="text-blue-500" size={24} /></div>
+              <div className="bg-blue-600/20 p-3 rounded-2xl border border-blue-500/30">
+                <ShoppingCart className="text-blue-500" size={24} />
+              </div>
               <div>
-                <h3 className="text-base font-black text-white uppercase tracking-tighter">Terminal de Venda</h3>
-                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Painel Operacional Mirella</p>
+                <h3 className="text-base font-black text-white uppercase tracking-tighter">Novo Pedido</h3>
+                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Preencha para agendar na agenda</p>
               </div>
             </div>
             <div className="flex gap-2">
               <div className="flex items-center bg-gray-950 border border-gray-700 rounded-2xl px-4 py-2">
-                <Calendar size={14} className="text-blue-500 mr-2" />
+                <span className="text-[10px] font-black text-gray-600 mr-2 uppercase">Data Venda</span>
                 <input type="date" value={date} onChange={e => setDate(e.target.value)} className="bg-transparent text-xs font-black text-white border-none outline-none" />
               </div>
-              <button onClick={() => setIsCatalogModalOpen(true)} className="p-3 bg-gray-900 text-gray-400 hover:text-white rounded-2xl border border-gray-700 transition-all shadow-sm">
-                <Settings2 size={20} />
-              </button>
             </div>
           </div>
           
@@ -251,35 +232,41 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
               <div className="bg-emerald-500/10 border border-emerald-500/30 p-5 rounded-[1.5rem] flex items-center gap-4 text-emerald-400 animate-fade-in-up">
                 <div className="bg-emerald-500/20 p-2 rounded-full"><CheckCircle2 size={24} /></div>
                 <div className="flex flex-col">
-                  <span className="text-sm font-black uppercase tracking-widest">Sucesso!</span>
-                  <span className="text-[10px] opacity-70">O pedido foi registrado e integrado à sua agenda.</span>
+                  <span className="text-sm font-black uppercase tracking-widest">Pedido Confirmado!</span>
+                  <span className="text-[10px] opacity-70">Agendado com sucesso para o dia {formatDate(lastSavedDate)}. Confira na aba "Agenda".</span>
                 </div>
               </div>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-              <InputGroup label="Venda" icon={<Calendar size={14} />}><input type="date" value={date} onChange={e => setDate(e.target.value)} className="custom-pdv-input" /></InputGroup>
-              <InputGroup label="Entrega" icon={<Calendar size={14} />}><input type="date" value={deliveryDate} onChange={e => setDeliveryDate(e.target.value)} className="custom-pdv-input font-bold text-blue-400" /></InputGroup>
-              <InputGroup label="Cliente" icon={<User size={14} />} className="md:col-span-2"><input type="text" value={contact} onChange={e => setContact(e.target.value)} className="custom-pdv-input" placeholder="Nome ou Telefone" /></InputGroup>
+              <InputGroup label="Data para Entrega" icon={<Clock size={14} />}>
+                <input type="date" required value={deliveryDate} onChange={e => setDeliveryDate(e.target.value)} className="custom-pdv-input font-black text-blue-400 text-lg" />
+              </InputGroup>
+              <InputGroup label="Cliente / Contato" icon={<User size={14} />} className="md:col-span-3">
+                <input type="text" value={contact} onChange={e => setContact(e.target.value)} className="custom-pdv-input" placeholder="Nome do cliente ou celular" />
+              </InputGroup>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
               <InputGroup label="Código" icon={<Tag size={14} />} className="md:col-span-2">
-                <input type="text" value={productCode} onChange={e => handleCodeChange(e.target.value)} className="custom-pdv-input uppercase" placeholder="COD" />
+                <input type="text" value={productCode} onChange={e => handleCodeChange(e.target.value)} className="custom-pdv-input uppercase" placeholder="EX: B01" />
               </InputGroup>
-              <InputGroup label="Item" icon={<Package size={14} />} className="md:col-span-5">
-                <input type="text" required value={productName} onChange={e => setProductName(e.target.value)} className="custom-pdv-input font-bold" placeholder="Descrição do Doce/Buquê" />
+              <InputGroup label="Descrição do Produto" icon={<Package size={14} />} className="md:col-span-10">
+                <input type="text" required value={productName} onChange={e => setProductName(e.target.value)} className="custom-pdv-input font-bold" placeholder="Ex: Buquê de Morangos Médio" />
               </InputGroup>
-              <InputGroup label="Endereço de Entrega" icon={<MapPinned size={14} />} className="md:col-span-5">
-                <input type="text" value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} className="custom-pdv-input text-xs" placeholder="Rua, Bairro, Cidade..." />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+              <InputGroup label="Endereço de Entrega (Opcional)" icon={<MapPin size={14} />} className="md:col-span-12">
+                <input type="text" value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} className="custom-pdv-input text-xs" placeholder="Rua, Número, Bairro, Cidade (Para usar a Roteirização por IA)" />
               </InputGroup>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 pt-6 border-t border-gray-700/50">
-              <PriceInput label="Venda" value={baseValue} onChange={setBaseValue} />
-              <PriceInput label="Custo" value={productCost} onChange={setProductCost} color="text-rose-400" />
+              <PriceInput label="Valor Base" value={baseValue} onChange={setBaseValue} />
+              <PriceInput label="Custo (CMV)" value={productCost} onChange={setProductCost} color="text-rose-400" />
               <div className="col-span-1 grid grid-cols-2 gap-3">
-                <PriceInput label="Extra" value={additional} onChange={setAdditional} compact />
+                <PriceInput label="Adicional" value={additional} onChange={setAdditional} compact />
                 <PriceInput label="Frete" value={frete} onChange={setFrete} compact />
               </div>
               <PriceInput label="Desconto" value={discount} onChange={setDiscount} color="text-orange-400" />
@@ -290,28 +277,30 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
                  <div className="w-56">
                    <label className="block text-[10px] font-black text-gray-500 uppercase mb-3 tracking-widest">Forma de Pagto</label>
                    <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className="custom-pdv-input h-14 font-black text-base">
-                      <option value="">Escolha...</option>
                       <option value="PIX">⚡ PIX</option>
                       <option value="CARTÃO">💳 CARTÃO</option>
                       <option value="DINHEIRO">💵 DINHEIRO</option>
                    </select>
                  </div>
                  <div className="flex flex-col">
-                    <span className="text-[10px] text-gray-500 font-black uppercase tracking-[0.2em] mb-2">Valor Final</span>
+                    <span className="text-[10px] text-gray-500 font-black uppercase tracking-[0.2em] mb-2">Total Final</span>
                     <span className="text-5xl font-black text-white leading-none tracking-tighter">{formatCurrency(total)}</span>
                  </div>
               </div>
-              <button type="submit" className="w-full md:w-auto bg-blue-600 hover:bg-blue-500 text-white font-black py-5 px-16 rounded-[1.5rem] shadow-2xl flex items-center justify-center gap-4 transition-all text-2xl uppercase tracking-tighter transform hover:scale-[1.02] active:scale-[0.98]"><Save size={28} /> Salvar Venda</button>
+              <button type="submit" className="w-full md:w-auto bg-blue-600 hover:bg-blue-500 text-white font-black py-5 px-16 rounded-[1.5rem] shadow-2xl flex items-center justify-center gap-4 transition-all text-2xl uppercase tracking-tighter transform hover:scale-[1.02] active:scale-[0.98]">
+                <Save size={28} /> Finalizar e Agendar
+              </button>
             </div>
           </form>
         </div>
 
+        {/* HISTÓRICO RECENTE */}
         <div className="lg:col-span-4 flex flex-col gap-6">
-          <div className="bg-gray-800 border border-gray-700 rounded-[2.5rem] shadow-xl overflow-hidden flex flex-col h-full max-h-[800px]">
+          <div className="bg-gray-800 border border-gray-700 rounded-[2.5rem] shadow-xl overflow-hidden flex flex-col h-full max-h-[850px]">
               <div className="bg-gray-950/80 p-6 border-b border-gray-700 flex justify-between items-center">
                  <div>
-                   <h3 className="text-xs font-black text-gray-300 uppercase tracking-widest flex items-center gap-3">Atividades Recentes</h3>
-                   <p className="text-[9px] text-gray-600 uppercase font-bold mt-1">Últimas 50 vendas</p>
+                   <h3 className="text-xs font-black text-gray-300 uppercase tracking-widest">Lançamentos Recentes</h3>
+                   <p className="text-[9px] text-gray-600 uppercase font-bold mt-1">Conferência de Agenda</p>
                  </div>
                  <button onClick={() => window.print()} className="bg-gray-900 p-3 rounded-2xl text-gray-500 hover:text-white border border-gray-700 transition-colors"><Printer size={18} /></button>
               </div>
@@ -319,21 +308,30 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
                   {recentOrders.length === 0 ? (
                     <div className="p-20 text-center flex flex-col items-center gap-4 opacity-20">
                       <Info size={40} />
-                      <p className="text-xs font-black uppercase tracking-widest">Sem registros hoje</p>
+                      <p className="text-xs font-black uppercase tracking-widest">Nenhum pedido hoje</p>
                     </div>
                   ) : (
                     recentOrders.map(t => (
-                      <div key={t.id} className="p-5 border-b border-gray-700/30 flex justify-between items-center group hover:bg-gray-900/40 transition-all">
-                          <div className="min-w-0">
-                              <p className="font-black text-white text-sm truncate uppercase tracking-tight mb-1 group-hover:text-blue-400 transition-colors">{t.pdvData?.productName || t.description.replace('PDV: ', '')}</p>
-                              <div className="flex items-center gap-2">
-                                <MapPin size={10} className="text-gray-600" />
-                                <span className="text-[10px] text-gray-500 truncate font-bold">{t.pdvData?.deliveryAddress || t.pdvData?.region || 'Balcão'}</span>
+                      <div key={t.id} className="p-5 border-b border-gray-700/30 flex flex-col gap-3 group hover:bg-gray-900/40 transition-all">
+                          <div className="flex justify-between items-start">
+                              <div className="min-w-0 flex-grow">
+                                  <p className="font-black text-white text-sm truncate uppercase tracking-tight group-hover:text-blue-400 transition-colors">{t.pdvData?.productName || t.description.replace('PDV: ', '')}</p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <User size={10} className="text-gray-600" />
+                                    <span className="text-[10px] text-gray-500 truncate font-bold">{t.pdvData?.contact || 'Cliente Avulso'}</span>
+                                  </div>
+                              </div>
+                              <div className="text-right ml-4">
+                                  <div className="font-black text-white text-base leading-none mb-1">{formatCurrency(t.amount)}</div>
+                                  <div className="text-[9px] text-gray-600 uppercase font-black tracking-widest">{formatDate(t.date)}</div>
                               </div>
                           </div>
-                          <div className="text-right ml-4">
-                              <div className="font-black text-white text-base leading-none mb-1">{formatCurrency(t.amount)}</div>
-                              <div className="text-[9px] text-gray-600 uppercase font-black tracking-widest">{formatDate(t.date)}</div>
+                          <div className="flex items-center justify-between">
+                             <div className="flex items-center gap-2 bg-blue-500/10 px-2 py-1 rounded-lg border border-blue-500/20">
+                                <Clock size={10} className="text-blue-400" />
+                                <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest">Entrega: {formatDate(t.pdvData?.deliveryDate || t.date)}</span>
+                             </div>
+                             <span className="text-[9px] text-gray-700 font-bold uppercase">{t.pdvData?.paymentMethod}</span>
                           </div>
                       </div>
                     ))
@@ -353,24 +351,18 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
                           <Route className="text-indigo-400" size={32} />
                         </div>
                         <div>
-                            <h3 className="text-2xl font-black text-white tracking-tighter uppercase mb-1">Roteirização Inteligente IA</h3>
-                            <p className="text-[10px] text-gray-500 font-black uppercase tracking-[0.2em]">Agrupamento e Otimização via Google Maps</p>
+                            <h3 className="text-2xl font-black text-white tracking-tighter uppercase mb-1">Roteirização Inteligente</h3>
+                            <p className="text-[10px] text-gray-500 font-black uppercase tracking-[0.2em]">Otimização de rotas para {dailyReport.deliveries.length} pedidos</p>
                         </div>
                     </div>
                     <button onClick={() => setIsRouteModalOpen(false)} className="bg-gray-800 p-4 rounded-2xl text-gray-500 hover:text-white transition-all"><X size={20} /></button>
                 </div>
                 
-                <div className="p-8 overflow-y-auto custom-scrollbar flex-grow space-y-10">
+                <div className="p-8 overflow-y-auto custom-scrollbar flex-grow">
                     {routeLoading ? (
                         <div className="h-96 flex flex-col items-center justify-center gap-8">
-                            <div className="relative">
-                              <div className="absolute inset-0 bg-indigo-500/10 rounded-full blur-3xl animate-pulse"></div>
-                              <Loader2 className="animate-spin text-indigo-500 relative z-10" size={64} />
-                            </div>
-                            <div className="text-center">
-                                <p className="text-white font-black text-xl uppercase tracking-tighter mb-2">Analisando Endereços...</p>
-                                <p className="text-xs text-gray-500 max-w-xs mx-auto leading-relaxed">Cruzando dados de {dailyReport.deliveries.length} entregas com o Google Maps para encontrar o melhor trajeto.</p>
-                            </div>
+                            <Loader2 className="animate-spin text-indigo-500" size={64} />
+                            <p className="text-white font-black text-xl uppercase tracking-tighter">Calculando Melhor Trajeto...</p>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
@@ -384,10 +376,10 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
                             <div className="lg:col-span-5 flex flex-col gap-6">
                                 <div className="bg-indigo-900/20 border border-indigo-500/20 rounded-3xl p-6">
                                     <h4 className="text-[11px] font-black text-indigo-300 uppercase tracking-widest flex items-center gap-2 mb-6">
-                                        <MapIcon size={18} /> Links Rápidos Google Maps
+                                        <MapIcon size={18} /> Rotas no Google Maps
                                     </h4>
                                     <div className="space-y-4">
-                                        {routeSources.length > 0 ? routeSources.map((source, idx) => (
+                                        {routeSources.map((source, idx) => (
                                             <a 
                                                 key={idx} 
                                                 href={source.uri} 
@@ -397,30 +389,16 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
                                             >
                                                 <div className="flex flex-col">
                                                     <span className="text-xs font-black text-white uppercase truncate mb-1">{source.title}</span>
-                                                    <span className="text-[10px] text-gray-600 font-bold">Ver trajeto no Mapa</span>
+                                                    <span className="text-[10px] text-gray-600 font-bold">Abrir Navegação</span>
                                                 </div>
-                                                <ExternalLink size={20} className="text-indigo-400 group-hover:scale-125 transition-transform" />
+                                                <ExternalLink size={20} className="text-indigo-400" />
                                             </a>
-                                        )) : (
-                                            <div className="bg-gray-900/50 p-8 rounded-2xl text-center flex flex-col items-center gap-3 opacity-30">
-                                                <MapPinned size={32} />
-                                                <p className="text-[10px] text-gray-500 font-bold uppercase leading-relaxed">Siga o roteiro sugerido ao lado para otimizar seu tempo.</p>
-                                            </div>
-                                        )}
+                                        ))}
                                     </div>
-                                </div>
-                                
-                                <div className="bg-emerald-900/10 p-6 rounded-3xl border border-emerald-500/20">
-                                  <h4 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Dica de Logística</h4>
-                                  <p className="text-xs text-gray-400 leading-relaxed italic">"Ao agrupar pedidos por bairro, você economiza cerca de 25% do tempo total de trânsito em horários de pico."</p>
                                 </div>
                             </div>
                         </div>
                     )}
-                </div>
-
-                <div className="p-8 bg-gray-950 border-t border-gray-800 flex justify-end">
-                    <button onClick={() => setIsRouteModalOpen(false)} className="bg-white text-gray-950 hover:bg-gray-100 font-black py-4 px-12 rounded-2xl text-xs uppercase tracking-widest transition-colors shadow-xl">Entendi, Voltar ao PDV</button>
                 </div>
             </div>
         </div>
