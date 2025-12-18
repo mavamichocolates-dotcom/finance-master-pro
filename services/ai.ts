@@ -104,21 +104,20 @@ Descrições para classificar: ${JSON.stringify(descriptions)}`;
     
     const ordersList = orders.map(o => {
       const addr = o.pdvData.deliveryAddress || o.pdvData.region;
-      return `- Pedido: ${o.pdvData.productName}, Cliente: ${o.pdvData.contact || 'S/N'}, Endereço: ${addr}`;
+      return `- Item: ${o.pdvData.productName}, Para: ${o.pdvData.contact || 'Cliente'}, Local: ${addr}`;
     }).join('\n');
     
     const prompt = `
-      Sou uma doceria (Mirella Doces). Tenho os seguintes pedidos para entrega hoje:
+      Sou a Mirella Doces e preciso realizar as seguintes entregas hoje:
       ${ordersList}
 
-      Por favor, analise esses endereços usando o Google Maps:
-      1. Identifique quais pedidos estão próximos entre si.
-      2. Crie "grupos de entrega" (rotas) otimizadas.
-      3. Sugira uma ordem de paradas.
-      4. Mencione os bairros principais identificados.
+      Como um especialista em logística urbana, use o Google Maps para:
+      1. Agrupar os pedidos por proximidade geográfica (Bairros/Regiões).
+      2. Sugerir a sequência mais eficiente de entregas começando da nossa sede (considere o trânsito e distâncias).
+      3. Para cada grupo, forneça uma breve justificativa da rota.
+      4. Crucial: Tente gerar links consolidados do Google Maps para cada rota sugerida.
 
-      Importante: Forneça links do Google Maps que agrupem esses endereços se possível.
-      Responda em Português do Brasil com tom profissional.
+      Responda de forma clara, em Português do Brasil, usando Markdown para destacar os grupos.
     `;
 
     const response = await ai.models.generateContent({
@@ -134,7 +133,6 @@ Descrições para classificar: ${JSON.stringify(descriptions)}`;
       }
     });
 
-    // Extrair fontes de grounding obrigatórias
     const sources: GroundingSource[] = [];
     const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
     
@@ -142,7 +140,7 @@ Descrições para classificar: ${JSON.stringify(descriptions)}`;
       chunks.forEach((chunk: any) => {
         if (chunk.maps) {
           sources.push({
-            title: chunk.maps.title || "Localização no Maps",
+            title: chunk.maps.title || "Ver no Google Maps",
             uri: chunk.maps.uri
           });
         }
@@ -150,7 +148,7 @@ Descrições para classificar: ${JSON.stringify(descriptions)}`;
     }
 
     return {
-      text: response.text || "Análise concluída.",
+      text: response.text || "Não foi possível gerar a análise no momento.",
       sources: sources
     };
   }
