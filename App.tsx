@@ -12,7 +12,7 @@ import ConfirmModal from './components/ConfirmModal';
 import Login from './components/Login';
 import UserManagement from './components/UserManagement';
 import { formatCurrency, formatDate } from './utils';
-import { LayoutDashboard, Wallet, Receipt, TrendingUp, TrendingDown, DollarSign, LogOut, Loader2, Database, Copy, ChevronLeft, ChevronRight, PiggyBank, Edit3, Users, Cloud, CloudOff, ShoppingCart } from 'lucide-react';
+import { LayoutDashboard, Wallet, Receipt, TrendingUp, TrendingDown, DollarSign, LogOut, Loader2, Database, ChevronLeft, ChevronRight, PiggyBank, Edit3, Users, Cloud, CloudOff, ShoppingCart } from 'lucide-react';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, MONTH_NAMES, SINGLE_STORE_NAME } from './constants';
 import { isSupabaseConfigured } from './src/supabase';
 
@@ -34,7 +34,6 @@ const App: React.FC = () => {
   const [authChecked, setAuthChecked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isDatabaseReady, setIsDatabaseReady] = useState(true);
-  const [copySuccess, setCopySuccess] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>(ActiveTab.INPUT);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   
@@ -62,8 +61,12 @@ const App: React.FC = () => {
         setCurrentUser(user);
         setAuthChecked(true);
         if (user) {
+          // SE FOR COLABORADOR, FORÇA ABA DO PDV E BLOQUEIA RESTO
+          if (user.role === 'COLLABORATOR') {
+            setActiveTab(ActiveTab.PDV);
+          }
           setIsLoading(true);
-          const [txs] = await Promise.all([db.getTransactions(), db.getUsers()]);
+          const txs = await db.getTransactions();
           setTransactions(txs);
         }
       } catch (error: any) {
@@ -89,7 +92,6 @@ const App: React.FC = () => {
       setTransactions((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
     } catch (e: any) {
       if (e.message?.includes('reviewed') || e.message?.includes('column')) setIsDatabaseReady(false);
-      else alert("Erro ao atualizar");
     } finally { setIsLoading(false); }
   };
 
@@ -107,53 +109,10 @@ const App: React.FC = () => {
     } finally { setIsLoading(false); }
   };
 
-  const handleDeleteCategory = async (type: TransactionType, categoryName: string) => {
-    if (categoryName === 'Outros') {
-      alert("A categoria 'Outros' é obrigatória e não pode ser removida.");
-      return;
-    }
-
-    const confirm = window.confirm(`Tem certeza que deseja excluir a categoria "${categoryName}"? Todos os lançamentos vinculados a ela serão movidos para "Outros".`);
-    if (!confirm) return;
-
-    setIsLoading(true);
-    try {
-      const typeKey = type === TransactionType.INCOME ? 'income' : 'expense';
-      const updatedCategories = {
-        ...categories,
-        [typeKey]: categories[typeKey].filter((c: string) => c !== categoryName)
-      };
-      setCategories(updatedCategories);
-      localStorage.setItem('finance_categories', JSON.stringify(updatedCategories));
-
-      const affectedTxs = transactions.filter(t => t.type === type && t.category === categoryName);
-      if (affectedTxs.length > 0) {
-        const updatedTxsList = [...transactions];
-        for (const t of affectedTxs) {
-          const updated = { ...t, category: 'Outros' };
-          await db.updateTransaction(updated);
-          const index = updatedTxsList.findIndex(tx => tx.id === t.id);
-          if (index !== -1) updatedTxsList[index] = updated;
-        }
-        setTransactions(updatedTxsList);
-      }
-    } catch (error) {
-      console.error("Erro ao excluir categoria:", error);
-      alert("Erro ao processar a exclusão da categoria.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleRenameCategory = async (type: TransactionType, oldName: string, newName: string) => {
-    if (oldName === 'Outros') {
-      alert("A categoria 'Outros' não pode ser renomeada.");
-      return;
-    }
-    
+    if (oldName === 'Outros') return;
     const trimmedNewName = newName.trim();
     if (!trimmedNewName || trimmedNewName === oldName) return;
-
     setIsLoading(true);
     try {
       const typeKey = type === TransactionType.INCOME ? 'income' : 'expense';
@@ -163,30 +122,30 @@ const App: React.FC = () => {
       };
       setCategories(updatedCategories);
       localStorage.setItem('finance_categories', JSON.stringify(updatedCategories));
+      const updatedTxsList = transactions.map(t => t.type === type && t.category === oldName ? { ...t, category: trimmedNewName } : t);
+      setTransactions(updatedTxsList);
+    } finally { setIsLoading(false); }
+  };
 
-      const affectedTxs = transactions.filter(t => t.type === type && t.category === oldName);
-      if (affectedTxs.length > 0) {
-        const updatedTxsList = [...transactions];
-        for (const t of affectedTxs) {
-          const updated = { ...t, category: trimmedNewName };
-          await db.updateTransaction(updated);
-          const index = updatedTxsList.findIndex(tx => tx.id === t.id);
-          if (index !== -1) updatedTxsList[index] = updated;
-        }
-        setTransactions(updatedTxsList);
-      }
-    } catch (error) {
-      console.error("Erro ao renomear categoria:", error);
-      alert("Erro ao processar a renomeação da categoria.");
-    } finally {
-      setIsLoading(false);
-    }
+  const handleDeleteCategory = async (type: TransactionType, categoryName: string) => {
+    if (categoryName === 'Outros') return;
+    if (!window.confirm(`Excluir "${categoryName}"? Lançamentos irão para "Outros".`)) return;
+    setIsLoading(true);
+    try {
+      const typeKey = type === TransactionType.INCOME ? 'income' : 'expense';
+      const updatedCategories = {
+        ...categories,
+        [typeKey]: categories[typeKey].filter((c: string) => c !== categoryName)
+      };
+      setCategories(updatedCategories);
+      localStorage.setItem('finance_categories', JSON.stringify(updatedCategories));
+      setTransactions(transactions.map(t => t.type === type && t.category === categoryName ? { ...t, category: 'Outros' } : t));
+    } finally { setIsLoading(false); }
   };
 
   const selectedMonthIndex = currentDate.getMonth();
   const selectedYear = currentDate.getFullYear();
   const selectedMonthName = MONTH_NAMES[selectedMonthIndex];
-  
   const firstDayOfSelectedMonth = new Date(selectedYear, selectedMonthIndex, 1);
 
   const previousBalance = useMemo(() => {
@@ -206,7 +165,6 @@ const App: React.FC = () => {
 
   const monthIncome = currentMonthTxs.filter(t => t.type === TransactionType.INCOME).reduce((s, t) => s + t.amount, 0);
   const monthExpense = currentMonthTxs.filter(t => t.type === TransactionType.EXPENSE).reduce((s, t) => s + t.amount, 0);
-  
   const closingBalance = previousBalance + monthIncome - monthExpense;
 
   if (!authChecked) return null;
@@ -217,15 +175,10 @@ const App: React.FC = () => {
            <div className="flex flex-col items-center mb-6 text-center">
              <div className="bg-orange-600/20 p-4 rounded-full mb-4"><Database size={48} className="text-orange-500" /></div>
              <h1 className="text-2xl font-bold text-white mb-2">Reparo Necessário</h1>
-             <p className="text-gray-400">Execute o código abaixo no SQL Editor do Supabase:</p>
+             <p className="text-gray-400">Execute o código SQL no painel do Supabase:</p>
            </div>
-           <div className="bg-gray-950 border border-gray-800 rounded-lg p-4 mb-6 relative">
-              <pre className="text-xs text-green-400 font-mono overflow-x-auto p-2 h-32">{SQL_SETUP_SCRIPT}</pre>
-              <button onClick={() => { navigator.clipboard.writeText(SQL_SETUP_SCRIPT); setCopySuccess(true); setTimeout(() => setCopySuccess(false), 2000); }} className="absolute top-4 right-4 bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold">
-                {copySuccess ? 'Copiado!' : 'Copiar'}
-              </button>
-           </div>
-           <button onClick={() => window.location.reload()} className="w-full bg-green-600 text-white font-bold py-3 rounded-lg">Recarregar</button>
+           <pre className="bg-gray-950 text-green-400 p-4 rounded-lg text-xs overflow-auto mb-6">{SQL_SETUP_SCRIPT}</pre>
+           <button onClick={() => window.location.reload()} className="w-full bg-blue-600 py-3 rounded-lg font-bold">Recarregar Sistema</button>
         </div>
       </div>
     );
@@ -234,6 +187,7 @@ const App: React.FC = () => {
   if (!currentUser) return <Login onLoginSuccess={() => window.location.reload()} />;
 
   const isAdmin = currentUser.role === 'ADMIN';
+  const isCollaborator = currentUser.role === 'COLLABORATOR';
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 pb-12">
@@ -242,100 +196,86 @@ const App: React.FC = () => {
       <header className="bg-gray-950 border-b border-gray-800 shadow-xl sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex flex-col lg:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-3">
-              <div className="bg-blue-600 p-2 rounded-lg shadow-lg shadow-blue-500/20"><LayoutDashboard size={28} className="text-white" /></div>
+              <div className="bg-blue-600 p-2 rounded-lg"><LayoutDashboard size={28} className="text-white" /></div>
               <div>
-                <h1 className="text-xl font-bold text-white leading-tight">FinanceMaster Pro</h1>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  {isSupabaseConfigured ? (
-                    <span className="flex items-center gap-1 text-[10px] font-black uppercase text-green-500 bg-green-500/10 px-1.5 rounded">
-                      <Cloud size={10} /> Nuvem Online
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1 text-[10px] font-black uppercase text-orange-500 bg-orange-500/10 px-1.5 rounded">
-                      <CloudOff size={10} /> Modo Local
-                    </span>
-                  )}
-                </div>
+                <h1 className="text-xl font-bold text-white leading-tight">Mirella Pro</h1>
+                <span className="text-[10px] font-black uppercase text-green-500 bg-green-500/10 px-1.5 rounded flex items-center gap-1 w-fit mt-1">
+                  <Cloud size={10} /> {isSupabaseConfigured ? 'Online' : 'Offline'}
+                </span>
               </div>
             </div>
 
             <div className="flex flex-wrap items-center justify-center gap-4">
-              <div className="flex items-center bg-gray-800 border border-gray-700 rounded-lg p-1">
-                 <button onClick={() => { const d = new Date(currentDate); d.setMonth(d.getMonth()-1); setCurrentDate(d); }} className="p-1 text-gray-400 hover:text-white transition-colors"><ChevronLeft size={16} /></button>
-                 <div className="px-3 text-sm font-bold text-white min-w-[140px] text-center capitalize">{selectedMonthName} {selectedYear}</div>
-                 <button onClick={() => { const d = new Date(currentDate); d.setMonth(d.getMonth()+1); setCurrentDate(d); }} className="p-1 text-gray-400 hover:text-white transition-colors"><ChevronRight size={16} /></button>
-              </div>
-              <nav className="flex bg-gray-800 rounded-lg p-1 shadow-inner">
-                <TabButton active={activeTab === ActiveTab.INPUT} onClick={() => setActiveTab(ActiveTab.INPUT)} icon={<Wallet size={18} />} label="Entradas" />
+              {!isCollaborator && (
+                <div className="flex items-center bg-gray-800 border border-gray-700 rounded-lg p-1">
+                  <button onClick={() => { const d = new Date(currentDate); d.setMonth(d.getMonth()-1); setCurrentDate(d); }} className="p-1 text-gray-400 hover:text-white"><ChevronLeft size={16} /></button>
+                  <div className="px-3 text-sm font-bold text-white min-w-[140px] text-center capitalize">{selectedMonthName} {selectedYear}</div>
+                  <button onClick={() => { const d = new Date(currentDate); d.setMonth(d.getMonth()+1); setCurrentDate(d); }} className="p-1 text-gray-400 hover:text-white"><ChevronRight size={16} /></button>
+                </div>
+              )}
+              
+              <nav className="flex bg-gray-800 rounded-lg p-1">
+                {!isCollaborator && (
+                  <>
+                    <TabButton active={activeTab === ActiveTab.INPUT} onClick={() => setActiveTab(ActiveTab.INPUT)} icon={<Wallet size={18} />} label="Entradas" />
+                    <TabButton active={activeTab === ActiveTab.MANAGEMENT} onClick={() => setActiveTab(ActiveTab.MANAGEMENT)} icon={<Receipt size={18} />} label="Gestão" />
+                    <TabButton active={activeTab === ActiveTab.DASHBOARD} onClick={() => setActiveTab(ActiveTab.DASHBOARD)} icon={<TrendingUp size={18} />} label="Fluxo" />
+                  </>
+                )}
                 <TabButton active={activeTab === ActiveTab.PDV} onClick={() => setActiveTab(ActiveTab.PDV)} icon={<ShoppingCart size={18} />} label="PDV" />
-                <TabButton active={activeTab === ActiveTab.MANAGEMENT} onClick={() => setActiveTab(ActiveTab.MANAGEMENT)} icon={<Receipt size={18} />} label="Gerenciamento" />
-                <TabButton active={activeTab === ActiveTab.DASHBOARD} onClick={() => setActiveTab(ActiveTab.DASHBOARD)} icon={<TrendingUp size={18} />} label="Fluxo" />
                 {isAdmin && <TabButton active={activeTab === ActiveTab.USERS} onClick={() => setActiveTab(ActiveTab.USERS)} icon={<Users size={18} />} label="Usuários" />}
               </nav>
-              <div className="flex items-center gap-2 border-l border-gray-700 pl-4 ml-2">
+
+              <div className="flex items-center gap-2 border-l border-gray-700 pl-4">
                 <div className="hidden sm:block text-right">
                   <p className="text-xs font-bold text-white">{currentUser.name}</p>
-                  <p className="text-[10px] text-gray-500 uppercase">{currentUser.role}</p>
+                  <p className="text-[10px] text-gray-500 uppercase">{currentUser.role === 'COLLABORATOR' ? 'Vendedor' : currentUser.role}</p>
                 </div>
-                <button onClick={() => { auth.logout(); window.location.reload(); }} className="p-2 text-red-400 hover:bg-red-900/20 rounded-lg transition-colors" title="Sair"><LogOut size={20} /></button>
+                <button onClick={() => { auth.logout(); window.location.reload(); }} className="p-2 text-red-400 hover:bg-red-900/20 rounded-lg"><LogOut size={20} /></button>
               </div>
             </div>
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-8 flex flex-col gap-6">
-        {activeTab !== ActiveTab.USERS && activeTab !== ActiveTab.PDV && (
+        {activeTab !== ActiveTab.USERS && activeTab !== ActiveTab.PDV && !isCollaborator && (
           <>
-            <div className="flex justify-between items-center bg-gray-800/50 border border-gray-700/50 rounded-xl px-6 py-3 shadow-sm">
+            <div className="flex justify-between items-center bg-gray-800/50 border border-gray-700/50 rounded-xl px-6 py-3">
               <div className="flex items-center gap-2 text-gray-400">
                 <PiggyBank size={20} className="text-pink-500" />
-                <span className="text-xs font-bold uppercase tracking-widest">Fundo de Caixa Inicial:</span>
+                <span className="text-xs font-bold uppercase tracking-widest">Caixa Inicial:</span>
                 <div 
-                  className="flex items-center gap-2 cursor-pointer bg-gray-900 px-3 py-1 rounded border border-gray-700 hover:border-blue-500 transition-all group"
-                  onClick={() => { setTempBalance(systemBaselineBalance.toString()); setIsEditingBaseline(true); }}
+                  className="flex items-center gap-2 cursor-pointer bg-gray-900 px-3 py-1 rounded border border-gray-700 group"
+                  onClick={() => { if(!isCollaborator) { setTempBalance(systemBaselineBalance.toString()); setIsEditingBaseline(true); } }}
                 >
                   {isEditingBaseline ? (
-                    <input 
-                      type="text" 
-                      autoFocus
-                      value={tempBalance}
-                      onChange={(e) => setTempBalance(e.target.value)}
-                      onBlur={handleSaveBaseline}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSaveBaseline()}
-                      className="bg-transparent text-sm text-white w-20 text-right outline-none"
-                    />
+                    <input autoFocus value={tempBalance} onChange={e => setTempBalance(e.target.value)} onBlur={handleSaveBaseline} onKeyDown={e => e.key === 'Enter' && handleSaveBaseline()} className="bg-transparent text-sm text-white w-20 text-right outline-none" />
                   ) : (
                     <>
                       <span className="text-sm font-bold text-white">{formatCurrency(systemBaselineBalance)}</span>
-                      <Edit3 size={12} className="text-gray-600 group-hover:text-blue-400" />
+                      {!isCollaborator && <Edit3 size={12} className="text-gray-600 group-hover:text-blue-400" />}
                     </>
                   )}
                 </div>
               </div>
-              <div className="hidden md:flex items-center gap-2 text-[10px] text-gray-500 font-bold uppercase">
-                 <span>Saldo Acumulado Anterior:</span>
-                 <span className={previousBalance >= 0 ? "text-green-500" : "text-red-500"}>{formatCurrency(previousBalance)}</span>
+              <div className="text-[10px] text-gray-500 font-bold uppercase">
+                 Saldo Anterior: <span className={previousBalance >= 0 ? "text-green-500" : "text-red-500"}>{formatCurrency(previousBalance)}</span>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <SummaryCard title="Saldo de Abertura" value={formatCurrency(previousBalance)} colorClass="bg-gray-800 border-gray-700 border" icon={<PiggyBank size={24} className="text-gray-400" />} />
-                <SummaryCard title="Entradas do Mês" value={formatCurrency(monthIncome)} colorClass="bg-green-900/40 border-green-700/50" icon={<TrendingUp size={24} className="text-green-500" />} />
-                <SummaryCard title="Saídas do Mês" value={formatCurrency(monthExpense)} colorClass="bg-red-900/40 border-red-700/50" icon={<TrendingDown size={24} className="text-red-500" />} />
-                <SummaryCard 
-                  title="Saldo de Fechamento" 
-                  value={formatCurrency(closingBalance)} 
-                  colorClass={`${closingBalance >= 0 ? 'bg-blue-900/40 border-blue-700/50' : 'bg-red-900/40 border-red-700/50'}`} 
-                  icon={<DollarSign size={24} className={closingBalance >= 0 ? "text-blue-400" : "text-red-400"} />} 
-                />
+                <SummaryCard title="Abertura" value={formatCurrency(previousBalance)} colorClass="bg-gray-800" icon={<PiggyBank size={24} />} />
+                <SummaryCard title="Entradas" value={formatCurrency(monthIncome)} colorClass="bg-green-900/30" icon={<TrendingUp size={24} />} />
+                <SummaryCard title="Saídas" value={formatCurrency(monthExpense)} colorClass="bg-red-900/30" icon={<TrendingDown size={24} />} />
+                <SummaryCard title="Fechamento" value={formatCurrency(closingBalance)} colorClass={closingBalance >= 0 ? "bg-blue-900/30" : "bg-orange-900/30"} icon={<DollarSign size={24} />} />
             </div>
           </>
         )}
 
-        {activeTab === ActiveTab.INPUT && <TransactionForm onAddTransaction={handleAddTransactions} incomeCategories={categories.income} expenseCategories={categories.expense} onAddCategory={(t, c) => setCategories((p: any) => ({...p, [t === TransactionType.INCOME ? 'income' : 'expense']: [...p[t === TransactionType.INCOME ? 'income' : 'expense'], c]}))} onRenameCategory={handleRenameCategory} onDeleteCategory={handleDeleteCategory} units={units} onAddUnit={() => {}} onRenameUnit={() => {}} onDeleteUnit={() => {}} existingTransactions={transactions} />}
+        {activeTab === ActiveTab.INPUT && !isCollaborator && <TransactionForm onAddTransaction={handleAddTransactions} incomeCategories={categories.income} expenseCategories={categories.expense} onAddCategory={(t, c) => setCategories((p: any) => ({...p, [t === TransactionType.INCOME ? 'income' : 'expense']: [...p[t === TransactionType.INCOME ? 'income' : 'expense'], c]}))} onRenameCategory={handleRenameCategory} onDeleteCategory={handleDeleteCategory} units={units} onAddUnit={() => {}} onRenameUnit={() => {}} onDeleteUnit={() => {}} existingTransactions={transactions} />}
         {activeTab === ActiveTab.PDV && <PDV onAddTransaction={handleAddTransactions} existingTransactions={transactions} />}
-        {activeTab === ActiveTab.MANAGEMENT && <TransactionTable transactions={transactions} onDelete={(id) => db.deleteTransaction(id).then(() => setTransactions(p => p.filter(t => t.id !== id)))} onDeleteMany={() => {}} onUpdate={handleUpdateTransaction} units={units} incomeCategories={categories.income} expenseCategories={categories.expense} />}
-        {activeTab === ActiveTab.DASHBOARD && <Dashboard transactions={transactions} units={units} />}
+        {activeTab === ActiveTab.MANAGEMENT && !isCollaborator && <TransactionTable transactions={transactions} onDelete={(id) => db.deleteTransaction(id).then(() => setTransactions(p => p.filter(t => t.id !== id)))} onDeleteMany={() => {}} onUpdate={handleUpdateTransaction} units={units} incomeCategories={categories.income} expenseCategories={categories.expense} />}
+        {activeTab === ActiveTab.DASHBOARD && !isCollaborator && <Dashboard transactions={transactions} units={units} />}
         {activeTab === ActiveTab.USERS && isAdmin && <UserManagement availableUnits={units} />}
       </main>
       
@@ -345,7 +285,7 @@ const App: React.FC = () => {
 };
 
 const TabButton: React.FC<{ active: boolean; onClick: () => void; icon: React.ReactNode; label: string }> = ({ active, onClick, icon, label }) => (
-  <button type="button" onClick={onClick} className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all ${active ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}>{icon}<span className="hidden sm:inline">{label}</span></button>
+  <button onClick={onClick} className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all ${active ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}>{icon}<span className="hidden sm:inline">{label}</span></button>
 );
 
 export default App;

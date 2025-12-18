@@ -3,9 +3,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Transaction, TransactionType, PaymentStatus } from '../types';
 import { generateId, getTodayString, formatCurrency, formatDate } from '../utils';
 import { 
-  Save, ShoppingCart, User, Phone, MapPin, Tag, Package, CreditCard, 
-  DollarSign, Plus, Calculator, Trash2, Search, ArrowRight, TrendingUp, 
-  Calendar, Info, Settings2, X, BarChart3, ReceiptText, Printer, CheckCircle2,
+  Save, ShoppingCart, User, MapPin, Tag, Package, CreditCard, 
+  Plus, Trash2, Search, TrendingUp, 
+  Calendar, Settings2, X, BarChart3, ReceiptText, Printer, CheckCircle2,
   TrendingDown, Percent
 } from 'lucide-react';
 
@@ -21,7 +21,7 @@ interface ProductInfo {
   cost: number;
 }
 
-const REGIONS = [
+const REGION_SUGGESTIONS = [
   'Zona Leste',
   'Zona Oeste',
   'Zona Norte',
@@ -29,9 +29,10 @@ const REGIONS = [
   'Centro',
   'ABC Paulista',
   'Guarulhos',
-  'Osasco / Barueri',
+  'Osasco',
+  'Barueri',
   'Interior',
-  'Outros'
+  'Loja / Balcão'
 ];
 
 const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => {
@@ -57,7 +58,7 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
   const [date, setDate] = useState(getTodayString());
   const [deliveryDate, setDeliveryDate] = useState(getTodayString());
   const [contact, setContact] = useState('');
-  const [region, setRegion] = useState(''); // Alterado de cepCode para region
+  const [region, setRegion] = useState(''); 
   const [productCode, setProductCode] = useState('');
   const [productName, setProductName] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
@@ -90,7 +91,7 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
     return v + a + f - d;
   }, [baseValue, additional, frete, discount]);
 
-  // Relatório DRE Diário (Baseado na data do lançamento)
+  // Relatório DRE Diário
   const dailyReport = useMemo(() => {
     const dayTxs = existingTransactions.filter(t => t.date === date && t.pdvData);
     const gross = dayTxs.reduce((s, t) => s + t.amount, 0);
@@ -120,7 +121,7 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
       pdvData: {
         deliveryDate,
         contact,
-        region, // Alterado de cepCode para region
+        region: region.trim() || 'Loja / Balcão', // Garantia de região preenchida
         productCode,
         productName,
         paymentMethod,
@@ -138,7 +139,7 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 2500);
     setContact('');
-    setRegion(''); // Reset region
+    setRegion(''); 
     setProductCode('');
     setProductName('');
     setBaseValue('');
@@ -157,7 +158,7 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
 
   return (
     <div className="space-y-6 animate-fade-in-up">
-      {/* PAINEL DE PERFORMANCE DO DIA (DRE RÁPIDO) */}
+      {/* DASHBOARD RÁPIDO */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <div className="lg:col-span-1 bg-gradient-to-br from-indigo-600 to-blue-700 p-6 rounded-2xl shadow-xl text-white relative overflow-hidden group">
            <ShoppingCart size={100} className="absolute -right-6 -bottom-6 opacity-10 group-hover:scale-110 transition-transform" />
@@ -203,14 +204,14 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
               </div>
               <div>
                 <h3 className="text-sm font-black text-white uppercase tracking-tighter">Novo Lançamento</h3>
-                <p className="text-[10px] text-gray-500 font-bold">Preencha os dados da venda abaixo</p>
+                <p className="text-[10px] text-gray-500 font-bold">Registro de venda PDV Mirella</p>
               </div>
             </div>
             <button 
               onClick={() => setIsCatalogModalOpen(true)}
               className="text-[10px] font-black bg-gray-900 text-gray-300 px-5 py-2.5 rounded-2xl hover:bg-gray-700 border border-gray-700 transition-all flex items-center gap-2 shadow-sm uppercase"
             >
-              <Settings2 size={14} /> Catálogo de Códigos
+              <Settings2 size={14} /> Catálogo
             </button>
           </div>
           
@@ -218,46 +219,49 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
             {showSuccess && (
               <div className="bg-emerald-500/10 border border-emerald-500/40 p-4 rounded-2xl flex items-center gap-3 text-emerald-400 animate-fade-in-up">
                 <div className="bg-emerald-500/20 p-1.5 rounded-lg"><CheckCircle2 size={20} /></div>
-                <span className="text-sm font-black uppercase tracking-tight">Venda registrada e integrada ao fluxo de caixa!</span>
+                <span className="text-sm font-black uppercase tracking-tight">Venda registrada com sucesso!</span>
               </div>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-              <InputGroup label="Data Lançamento" icon={<Calendar size={14} />}>
+              <InputGroup label="Data Venda" icon={<Calendar size={14} />}>
                 <input type="date" value={date} onChange={e => setDate(e.target.value)} className="custom-pdv-input" />
               </InputGroup>
               <InputGroup label="Data Entrega" icon={<Calendar size={14} />}>
                 <input type="date" value={deliveryDate} onChange={e => setDeliveryDate(e.target.value)} className="custom-pdv-input" />
               </InputGroup>
               <InputGroup label="Cliente / Contato" icon={<User size={14} />} className="md:col-span-2">
-                <input type="text" value={contact} onChange={e => setContact(e.target.value)} className="custom-pdv-input" placeholder="Ex: 11 99999-9999 ou Nome" />
+                <input type="text" value={contact} onChange={e => setContact(e.target.value)} className="custom-pdv-input" placeholder="Celular ou Nome" />
               </InputGroup>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
-              <InputGroup label="COD" icon={<Tag size={14} />} className="md:col-span-3">
+              <InputGroup label="COD" icon={<Tag size={14} />} className="md:col-span-2">
                 <input 
                   type="text" 
                   value={productCode} 
                   onChange={e => handleCodeChange(e.target.value)} 
-                  className="custom-pdv-input border-indigo-500/40 text-indigo-400 font-black uppercase placeholder:text-indigo-900" 
-                  placeholder="EX: A16" 
+                  className="custom-pdv-input border-indigo-500/40 text-indigo-400 font-black uppercase" 
+                  placeholder="A16" 
                 />
               </InputGroup>
               <InputGroup label="Nome do Produto" icon={<Package size={14} />} className="md:col-span-6">
-                <input type="text" required value={productName} onChange={e => setProductName(e.target.value)} className="custom-pdv-input font-bold" placeholder="Digite o nome ou use o código..." />
+                <input type="text" required value={productName} onChange={e => setProductName(e.target.value)} className="custom-pdv-input font-bold" placeholder="Digite o buquê..." />
               </InputGroup>
-              <InputGroup label="Região / Zona" icon={<MapPin size={14} />} className="md:col-span-3">
-                <select 
+              <InputGroup label="Bairro / Cidade / Região" icon={<MapPin size={14} />} className="md:col-span-4">
+                <input 
+                  list="regions-list-pdv"
+                  type="text" 
                   value={region} 
                   onChange={e => setRegion(e.target.value)} 
                   className="custom-pdv-input font-bold"
-                >
-                  <option value="">Selecione...</option>
-                  {REGIONS.map(reg => (
+                  placeholder="Ex: Zona Leste, Itaquera..."
+                />
+                <datalist id="regions-list-pdv">
+                  {REGION_SUGGESTIONS.map(reg => (
                     <option key={reg} value={reg}>{reg}</option>
                   ))}
-                </select>
+                </datalist>
               </InputGroup>
             </div>
 
@@ -297,12 +301,12 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
           </form>
         </div>
 
-        {/* HISTÓRICO DE HOJE (DETALHADO) */}
+        {/* HISTÓRICO LATERAL */}
         <div className="lg:col-span-4 flex flex-col gap-6">
           <div className="bg-gray-800 border border-gray-700 rounded-3xl shadow-xl overflow-hidden flex flex-col flex-grow max-h-[800px]">
             <div className="bg-gray-950/80 p-5 border-b border-gray-700 flex justify-between items-center backdrop-blur-md">
                <h3 className="text-xs font-black text-gray-300 uppercase tracking-widest flex items-center gap-3">
-                 <ReceiptText size={18} className="text-blue-500" /> Histórico Recente
+                 <ReceiptText size={18} className="text-blue-500" /> Vendas Recentes
                </h3>
                <button onClick={() => window.print()} className="bg-gray-900 p-2.5 rounded-xl text-gray-500 hover:text-white border border-gray-700 hover:border-blue-500 transition-all">
                  <Printer size={18} />
@@ -325,42 +329,27 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
                           <p className="font-black text-white text-sm truncate uppercase tracking-tight mb-1">{t.pdvData?.productName || t.description}</p>
                           <div className="flex items-center gap-3 text-[10px] text-gray-500 font-bold uppercase tracking-tight">
                             <span className="bg-indigo-600/10 px-2 py-0.5 rounded text-indigo-400 border border-indigo-500/20">{t.pdvData?.productCode || '---'}</span>
-                            <span className="flex items-center gap-1"><MapPin size={10} /> {t.pdvData?.region || '-'}</span>
+                            <span className="flex items-center gap-1 max-w-[120px] truncate"><MapPin size={10} /> {t.pdvData?.region || '-'}</span>
                           </div>
                         </div>
                       </div>
                       <div className="text-right ml-4">
                          <div className="font-black text-white text-base leading-none mb-1">{formatCurrency(t.amount)}</div>
                          <div className={`text-[10px] font-black uppercase flex items-center justify-end gap-1 ${lucro >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                           <Percent size={10} /> {formatCurrency(lucro)} ({margem.toFixed(0)}%)
+                           <Percent size={10} /> {formatCurrency(lucro)}
                          </div>
                       </div>
                     </div>
                   );
                 })}
-                {pdvTransactions.length === 0 && (
-                  <div className="p-16 text-center">
-                    <div className="bg-gray-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 border border-gray-700">
-                      <Package size={32} className="text-gray-600" />
-                    </div>
-                    <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Nenhuma venda encontrada</p>
-                  </div>
-                )}
               </div>
-            </div>
-            <div className="p-5 bg-gray-950/40 border-t border-gray-700 text-center">
-               <span className="text-[10px] text-gray-600 font-black uppercase tracking-widest">Painel Operacional Mirella Pro</span>
             </div>
           </div>
         </div>
       </div>
 
       {isCatalogModalOpen && (
-        <CatalogManager 
-          items={catalog} 
-          onClose={() => setIsCatalogModalOpen(false)} 
-          onSave={setCatalog} 
-        />
+        <CatalogManager items={catalog} onClose={() => setIsCatalogModalOpen(false)} onSave={setCatalog} />
       )}
 
       <style>{`
@@ -380,16 +369,12 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
           background-color: #030712;
           box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
         }
-        @media print {
-          header, nav, form, .lg\\:col-span-8, button { display: none !important; }
-          .lg\\:col-span-4 { width: 100% !important; max-height: none !important; }
-          body { background: white !important; color: black !important; }
-        }
       `}</style>
     </div>
   );
 };
 
+// Componentes Auxiliares
 const ReportCard = ({ label, value, icon, subtext, highlight, isNegative }: any) => (
   <div className={`p-6 rounded-3xl border shadow-xl flex flex-col justify-center relative overflow-hidden transition-all hover:scale-[1.02] cursor-default ${highlight ? 'bg-indigo-600/10 border-indigo-500/30' : 'bg-gray-800 border-gray-700'}`}>
     <div className="flex justify-between items-start mb-3">
@@ -461,75 +446,47 @@ const CatalogManager: React.FC<any> = ({ items, onClose, onSave }) => {
                 <Tag className="text-indigo-500" size={24} />
               </div>
               <div>
-                <h3 className="text-2xl font-black text-white tracking-tighter uppercase">Catálogo Operacional</h3>
-                <p className="text-xs text-gray-500 font-bold">Defina códigos e valores pré-ajustados</p>
+                <h3 className="text-2xl font-black text-white tracking-tighter uppercase">Gestão de Itens</h3>
+                <p className="text-xs text-gray-500 font-bold">Configure códigos e preços automáticos</p>
               </div>
            </div>
            <button onClick={onClose} className="text-gray-500 hover:text-white transition-all bg-gray-800 p-3 rounded-2xl border border-gray-700">
              <X size={20} />
            </button>
         </div>
-
         <div className="p-8 overflow-y-auto custom-scrollbar flex-grow space-y-10">
-          <div className="bg-indigo-600/5 p-8 rounded-[2rem] border border-indigo-500/20 relative overflow-hidden group">
-            <div className="absolute -top-10 -right-10 w-32 h-32 bg-indigo-600/10 rounded-full blur-3xl group-hover:bg-indigo-600/20 transition-all"></div>
+          <div className="bg-indigo-600/5 p-8 rounded-[2rem] border border-indigo-500/20">
             <h4 className="text-[10px] font-black text-indigo-400 uppercase mb-6 tracking-[0.2em] flex items-center gap-2">
-              <Plus size={14} /> Cadastrar Produto
+              <Plus size={14} /> Novo Produto no Catálogo
             </h4>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <input type="text" placeholder="CÓDIGO" value={newItem.code} onChange={e => setNewItem({...newItem, code: e.target.value})} className="custom-pdv-input text-xs uppercase font-black" />
-              <input type="text" placeholder="NOME BUQUÊ" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} className="custom-pdv-input text-xs col-span-1 font-bold" />
-              <input type="number" placeholder="VENDA (R$)" value={newItem.price || ''} onChange={e => setNewItem({...newItem, price: parseFloat(e.target.value)})} className="custom-pdv-input text-xs" />
-              <input type="number" placeholder="CUSTO (R$)" value={newItem.cost || ''} onChange={e => setNewItem({...newItem, cost: parseFloat(e.target.value)})} className="custom-pdv-input text-xs" />
-              <button onClick={addItem} className="col-span-full bg-indigo-600 text-white font-black py-4 rounded-2xl text-[11px] uppercase tracking-[0.1em] hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-600/20 active:scale-95 transform">
-                Adicionar ao Catálogo Mirella
-              </button>
+              <input type="text" placeholder="NOME BUQUÊ" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} className="custom-pdv-input text-xs font-bold" />
+              <input type="number" placeholder="VENDA" value={newItem.price || ''} onChange={e => setNewItem({...newItem, price: parseFloat(e.target.value)})} className="custom-pdv-input text-xs" />
+              <input type="number" placeholder="CUSTO" value={newItem.cost || ''} onChange={e => setNewItem({...newItem, cost: parseFloat(e.target.value)})} className="custom-pdv-input text-xs" />
+              <button onClick={addItem} className="col-span-full bg-indigo-600 text-white font-black py-4 rounded-2xl text-[11px] uppercase tracking-[0.1em] hover:bg-indigo-500 transition-all">Salvar no Catálogo</button>
             </div>
           </div>
-
           <div className="space-y-6">
             <div className="flex justify-between items-center px-2">
-              <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em]">Itens Registrados ({localItems.length})</h4>
-              <div className="relative w-64">
-                <Search size={16} className="absolute left-4 top-3 text-gray-600" />
-                <input type="text" placeholder="PESQUISAR..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-2xl pl-12 py-2.5 text-[10px] font-bold outline-none focus:border-indigo-500" />
-              </div>
+              <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em]">Cadastrados ({localItems.length})</h4>
+              <input type="text" placeholder="BUSCAR..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="bg-gray-800 border border-gray-700 rounded-2xl px-6 py-2 text-[10px] font-bold outline-none" />
             </div>
-            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {filteredItems.map((item: any) => (
-                <div key={item.code} className="bg-gray-850/30 border border-gray-800 rounded-[1.5rem] p-5 flex justify-between items-center hover:bg-gray-800/50 hover:border-gray-600 transition-all group shadow-sm">
-                  <div className="flex items-center gap-5">
-                    <span className="text-[11px] font-black text-indigo-400 bg-indigo-900/30 px-4 py-2 rounded-xl border border-indigo-500/20 uppercase shadow-inner">
-                      {item.code}
-                    </span>
-                    <div>
-                      <div className="text-sm font-black text-white uppercase tracking-tight mb-1">{item.name}</div>
-                      <div className="text-[10px] text-gray-500 font-bold uppercase tracking-tighter">
-                        Venda: <span className="text-emerald-500">{formatCurrency(item.price)}</span> • 
-                        Custo: <span className="text-rose-400">{formatCurrency(item.cost)}</span>
-                      </div>
-                    </div>
+                <div key={item.code} className="bg-gray-850/30 border border-gray-800 rounded-[1.5rem] p-5 flex justify-between items-center hover:bg-gray-800/50 transition-all">
+                  <div>
+                    <span className="text-[11px] font-black text-indigo-400 bg-indigo-900/30 px-3 py-1 rounded-lg mr-3">{item.code}</span>
+                    <span className="text-sm font-black text-white uppercase">{item.name}</span>
                   </div>
-                  <button onClick={() => removeItem(item.code)} className="p-3 text-gray-700 hover:text-rose-500 transition-all bg-gray-950/40 rounded-xl border border-transparent hover:border-rose-900/50">
-                    <Trash2 size={18} />
-                  </button>
+                  <button onClick={() => removeItem(item.code)} className="text-gray-700 hover:text-rose-500"><Trash2 size={18} /></button>
                 </div>
               ))}
-              {filteredItems.length === 0 && (
-                <div className="col-span-full py-16 text-center">
-                  <Package size={40} className="mx-auto text-gray-800 mb-4 opacity-20" />
-                  <p className="text-gray-600 font-bold uppercase text-[10px] tracking-widest italic">Nenhum buquê encontrado no filtro</p>
-                </div>
-              )}
             </div>
           </div>
         </div>
-
         <div className="p-8 bg-gray-950/50 border-t border-gray-800 text-center">
-           <button onClick={onClose} className="bg-gray-100 hover:bg-white text-gray-950 font-black py-4 px-16 rounded-2xl text-[11px] uppercase tracking-[0.2em] transition-all shadow-xl active:scale-95">
-             Concluir Ajustes
-           </button>
+           <button onClick={onClose} className="bg-gray-100 text-gray-950 font-black py-4 px-16 rounded-2xl text-[11px] uppercase tracking-[0.2em]">Concluir Edição</button>
         </div>
       </div>
     </div>
