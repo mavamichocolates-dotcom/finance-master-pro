@@ -3,11 +3,12 @@ import React, { useState, useMemo } from 'react';
 import { Transaction, TransactionType, PaymentStatus } from '../types';
 import { generateId, getTodayString, formatCurrency, formatDate } from '../utils';
 import { aiService } from '../services/ai';
+// Added Trash2 to the imports below
 import { 
   Save, ShoppingCart, User, MapPin, Tag, Package, 
-  Plus, Trash2, TrendingUp, 
-  Calendar, Settings2, X, BarChart3, Printer, CheckCircle2,
-  TrendingDown, Info, Clock, Sparkles
+  Settings2, X, BarChart3, Printer, CheckCircle2,
+  TrendingUp, TrendingDown, Info, Clock, Sparkles,
+  Trash2
 } from 'lucide-react';
 
 interface PDVProps {
@@ -78,12 +79,10 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
   }, [existingTransactions]);
 
   const dailyReport = useMemo(() => {
-    // Filtramos o relatório pelo que está sendo visualizado no seletor de data
     const daySales = pdvTransactions.filter(t => t.date.substring(0, 10) === date.substring(0, 10));
     const gross = daySales.reduce((s, t) => s + (Number(t.amount) || 0), 0);
     const cost = daySales.reduce((s, t) => s + (Number(t.pdvData?.productCost) || 0), 0);
     
-    // Entregas agendadas PARA a data de entrega selecionada
     const deliveriesScheduledForSelectedDate = pdvTransactions.filter(t => {
       const dDate = t.pdvData?.deliveryDate || t.date;
       return dDate.substring(0, 10) === deliveryDate.substring(0, 10);
@@ -95,16 +94,6 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
         deliveriesCount: deliveriesScheduledForSelectedDate.length
     };
   }, [pdvTransactions, date, deliveryDate]);
-
-  const recentOrders = useMemo(() => {
-    return [...pdvTransactions]
-      .sort((a, b) => {
-        const dateA = new Date(a.createdAt || a.date).getTime();
-        const dateB = new Date(b.createdAt || b.date).getTime();
-        return dateB - dateA;
-      })
-      .slice(0, 50);
-  }, [pdvTransactions]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,7 +126,6 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 4000);
     
-    // Limpar apenas campos de produto e cliente, mantendo as datas para facilitar múltiplos lançamentos
     setContact(''); 
     setRegion(''); 
     setDeliveryAddress(''); 
@@ -152,29 +140,29 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
 
   return (
     <div className="space-y-6 animate-fade-in-up">
-      {/* INDICADORES DO TERMINAL */}
+      {/* INDICADORES DO TERMINAL (Últimos Lançamentos atualizam aqui em cima) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <ReportCard label="Vendas (Data Lanc.)" value={dailyReport.gross} icon={<TrendingUp size={18} className="text-emerald-400" />} />
+        <ReportCard label="Vendas Hoje" value={dailyReport.gross} icon={<TrendingUp size={18} className="text-emerald-400" />} />
         <div className="bg-indigo-900/20 border border-indigo-500/30 p-6 rounded-[2rem] flex flex-col justify-center">
-            <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2">Agendados para {formatDate(deliveryDate)}</span>
+            <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2">Pedidos na Data: {formatDate(date)}</span>
             <div className="flex items-center gap-3">
-               <Calendar className="text-indigo-400" size={24} />
-               <span className="text-3xl font-black text-white">{dailyReport.deliveriesCount}</span>
+               <Package className="text-indigo-400" size={24} />
+               <span className="text-3xl font-black text-white">{dailyReport.salesCount}</span>
             </div>
         </div>
-        <ReportCard label="Margem Hoje" value={dailyReport.net} icon={<BarChart3 size={18} className="text-blue-400" />} highlight />
+        <ReportCard label="Líquido do Dia" value={dailyReport.net} icon={<BarChart3 size={18} className="text-blue-400" />} highlight />
         <div className="bg-gray-800 border border-gray-700 p-6 rounded-[2rem] flex flex-col justify-center">
-            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Pedidos Recentes</span>
+            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Total de Pedidos PDV</span>
             <div className="flex items-center gap-3">
-               <Package className="text-gray-400" size={24} />
+               <ShoppingCart className="text-gray-400" size={24} />
                <span className="text-3xl font-black text-white">{pdvTransactions.length}</span>
             </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* TERMINAL DE LANÇAMENTO */}
-        <div className="lg:col-span-8 bg-gray-800 border border-gray-700 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col">
+      <div className="grid grid-cols-1 gap-6">
+        {/* TERMINAL DE LANÇAMENTO EXPANDIDO */}
+        <div className="bg-gray-800 border border-gray-700 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col">
           <div className="bg-gray-900/80 p-6 border-b border-gray-700 flex justify-between items-center backdrop-blur-md">
             <div className="flex items-center gap-4">
               <div className="bg-blue-600/20 p-3 rounded-2xl border border-blue-500/30">
@@ -182,12 +170,12 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
               </div>
               <div>
                 <h3 className="text-base font-black text-white uppercase tracking-tighter">Terminal Mirella Doces</h3>
-                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Lançamento de Pedidos e Agendamentos</p>
+                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Lançamento de Pedidos</p>
               </div>
             </div>
             <div className="flex gap-2">
               <div className="flex items-center bg-gray-950 border border-gray-700 rounded-2xl px-4 py-2">
-                <span className="text-[10px] font-black text-gray-600 mr-2 uppercase">Venda em:</span>
+                <span className="text-[10px] font-black text-gray-600 mr-2 uppercase">Data:</span>
                 <input type="date" value={date} onChange={e => setDate(e.target.value)} className="bg-transparent text-xs font-black text-white border-none outline-none" />
               </div>
               <button onClick={() => setIsCatalogModalOpen(true)} className="p-3 bg-gray-900 text-gray-400 hover:text-white rounded-2xl border border-gray-700 transition-all shadow-sm">
@@ -202,8 +190,8 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
                 <div className="flex items-center gap-4">
                   <div className="bg-emerald-500/20 p-2 rounded-full"><CheckCircle2 size={24} /></div>
                   <div className="flex flex-col">
-                    <span className="text-sm font-black uppercase tracking-widest">Pedido Agendado!</span>
-                    <span className="text-[10px] opacity-70 font-bold">Lançado com sucesso na Agenda para {formatDate(deliveryDate)}.</span>
+                    <span className="text-sm font-black uppercase tracking-widest">Venda Registrada!</span>
+                    <span className="text-[10px] opacity-70 font-bold">O lançamento foi contabilizado nos indicadores acima.</span>
                   </div>
                 </div>
                 <Sparkles className="animate-pulse text-yellow-400" size={20} />
@@ -211,25 +199,25 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <InputGroup label="Data da Entrega / Agenda" icon={<Clock size={16} />}>
-                <input type="date" required value={deliveryDate} onChange={e => setDeliveryDate(e.target.value)} className="custom-pdv-input font-black text-blue-400 text-xl border-blue-500/30" />
+              <InputGroup label="Cliente / Identificação" icon={<User size={16} />}>
+                <input type="text" value={contact} onChange={e => setContact(e.target.value)} className="custom-pdv-input" placeholder="Nome do cliente" />
               </InputGroup>
-              <InputGroup label="Cliente / Telefone" icon={<User size={16} />}>
-                <input type="text" value={contact} onChange={e => setContact(e.target.value)} className="custom-pdv-input" placeholder="Identificação do Cliente" />
+              <InputGroup label="Data Prevista Entrega (Opcional)" icon={<Clock size={16} />}>
+                <input type="date" value={deliveryDate} onChange={e => setDeliveryDate(e.target.value)} className="custom-pdv-input font-black text-blue-400" />
               </InputGroup>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
-              <InputGroup label="Código" icon={<Tag size={16} />} className="md:col-span-3">
+              <InputGroup label="Código" icon={<Tag size={16} />} className="md:col-span-2">
                 <input type="text" value={productCode} onChange={e => handleCodeChange(e.target.value)} className="custom-pdv-input uppercase text-center font-black" placeholder="CÓD" />
               </InputGroup>
-              <InputGroup label="Produto / Descrição" icon={<Package size={16} />} className="md:col-span-9">
+              <InputGroup label="Produto / Descrição" icon={<Package size={16} />} className="md:col-span-10">
                 <input type="text" required value={productName} onChange={e => setProductName(e.target.value)} className="custom-pdv-input font-black text-white" placeholder="O que está sendo vendido?" />
               </InputGroup>
             </div>
 
-            <InputGroup label="Local da Entrega (Opcional)" icon={<MapPin size={16} />}>
-                <input type="text" value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} className="custom-pdv-input text-xs" placeholder="Endereço completo, bairro ou região" />
+            <InputGroup label="Endereço / Observação" icon={<MapPin size={16} />}>
+                <input type="text" value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} className="custom-pdv-input text-xs" placeholder="Detalhes do local de entrega" />
             </InputGroup>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 pt-6 border-t border-gray-700/50">
@@ -254,64 +242,15 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
                    </select>
                  </div>
                  <div className="flex flex-col">
-                    <span className="text-[10px] text-gray-500 font-black uppercase tracking-[0.2em] mb-2">Total a Receber</span>
+                    <span className="text-[10px] text-gray-500 font-black uppercase tracking-[0.2em] mb-2">Total do Lançamento</span>
                     <span className="text-5xl font-black text-white leading-none tracking-tighter">{formatCurrency(total)}</span>
                  </div>
               </div>
               <button type="submit" className="w-full md:w-auto bg-blue-600 hover:bg-blue-500 text-white font-black py-5 px-16 rounded-[1.5rem] shadow-2xl flex items-center justify-center gap-4 transition-all text-2xl uppercase tracking-tighter transform hover:scale-[1.02] active:scale-[0.98]">
-                <Save size={28} /> Confirmar Pedido
+                <Save size={28} /> Confirmar Lançamento
               </button>
             </div>
           </form>
-        </div>
-
-        {/* HISTÓRICO LATERAL */}
-        <div className="lg:col-span-4 flex flex-col gap-6">
-          <div className="bg-gray-800 border border-gray-700 rounded-[2.5rem] shadow-xl overflow-hidden flex flex-col h-full max-h-[850px]">
-              <div className="bg-gray-950/80 p-6 border-b border-gray-700 flex justify-between items-center">
-                 <div>
-                   <h3 className="text-xs font-black text-gray-300 uppercase tracking-widest">Atividade Recente</h3>
-                   <p className="text-[9px] text-gray-600 uppercase font-bold mt-1">Últimos Lançamentos</p>
-                 </div>
-                 <button onClick={() => window.print()} className="bg-gray-900 p-3 rounded-2xl text-gray-500 hover:text-white border border-gray-700 transition-colors"><Printer size={18} /></button>
-              </div>
-              <div className="flex-grow overflow-y-auto custom-scrollbar">
-                  {recentOrders.length === 0 ? (
-                    <div className="p-20 text-center flex flex-col items-center gap-4 opacity-20">
-                      <Info size={40} />
-                      <p className="text-xs font-black uppercase tracking-widest">Sem pedidos registrados</p>
-                    </div>
-                  ) : (
-                    recentOrders.map(t => (
-                      <div key={t.id} className={`p-5 border-b border-gray-700/30 flex flex-col gap-3 group transition-all ${lastSavedId === t.id ? 'bg-blue-900/10 border-l-4 border-l-blue-500' : 'hover:bg-gray-900/40'}`}>
-                          <div className="flex justify-between items-start">
-                              <div className="min-w-0 flex-grow">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <p className="font-black text-white text-sm truncate uppercase tracking-tight group-hover:text-blue-400 transition-colors">{t.pdvData?.productName || t.description.replace('PDV: ', '')}</p>
-                                    {lastSavedId === t.id && <span className="text-[8px] bg-blue-500 text-white px-1.5 py-0.5 rounded-full font-black animate-pulse">NOVO</span>}
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <User size={10} className="text-gray-600" />
-                                    <span className="text-[10px] text-gray-500 truncate font-bold">{t.pdvData?.contact || 'Cliente Avulso'}</span>
-                                  </div>
-                              </div>
-                              <div className="text-right ml-4">
-                                  <div className="font-black text-white text-base leading-none mb-1">{formatCurrency(t.amount)}</div>
-                                  <div className="text-[9px] text-gray-600 uppercase font-black tracking-widest">{formatDate(t.date)}</div>
-                              </div>
-                          </div>
-                          <div className="flex items-center justify-between">
-                             <div className={`flex items-center gap-2 px-2 py-1 rounded-lg border ${lastSavedId === t.id ? 'bg-blue-500/20 border-blue-500/30' : 'bg-gray-900 border-gray-700'}`}>
-                                <Clock size={10} className="text-blue-400" />
-                                <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest">Agenda: {formatDate(t.pdvData?.deliveryDate || t.date)}</span>
-                             </div>
-                             <span className="text-[9px] text-gray-700 font-black uppercase tracking-widest">{t.pdvData?.paymentMethod}</span>
-                          </div>
-                      </div>
-                    ))
-                  )}
-              </div>
-          </div>
         </div>
       </div>
 
