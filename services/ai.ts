@@ -7,20 +7,9 @@ export interface SuggestionResult {
   alternatives: string[];
 }
 
-export interface GroundingSource {
-  title: string;
-  uri: string;
-}
-
-export interface RouteAnalysisResponse {
-  text: string;
-  sources: GroundingSource[];
-}
-
 class AIService {
   private HISTORY_KEY = 'fm_learned_patterns';
   private MODEL_TEXT = 'gemini-3-flash-preview';
-  private MODEL_MAPS = 'gemini-2.5-flash';
 
   private normalizeDescription(desc: string): string {
     return desc.toLowerCase().replace(/[0-9]/g, '').replace(/[^\w\s]/gi, '').replace(/\s+/g, ' ').trim();
@@ -97,62 +86,6 @@ Descrições para classificar: ${JSON.stringify(descriptions)}`;
       console.error("Erro ao processar resposta em lote da IA:", e);
       return [];
     }
-  }
-
-  async optimizeDeliveryRoutes(orders: any[], userLocation?: { lat: number, lng: number }): Promise<RouteAnalysisResponse> {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
-    // Preparar lista de pedidos para o prompt
-    const ordersList = orders.map(o => {
-      const addr = o.pdvData.deliveryAddress || o.pdvData.region;
-      return `- Pedido #${o.id.substring(0,4)}: ${o.pdvData.productName}, Para: ${o.pdvData.contact || 'Cliente'}, Local: ${addr}`;
-    }).join('\n');
-    
-    const prompt = `
-      Você é um especialista em logística. Preciso otimizar as entregas de hoje para a Mirella Doces.
-      Pedidos agendados:
-      ${ordersList}
-
-      Tarefas:
-      1. Identifique as coordenadas e regiões de cada endereço usando o Google Maps.
-      2. Agrupe pedidos que estão na mesma direção ou bairro.
-      3. Sugira uma ordem de entrega (rota) eficiente para economizar tempo.
-      4. Justifique brevemente por que essa ordem é a melhor.
-
-      Importante: Forneça a análise em Português e, se possível, gere links consolidados do Google Maps.
-    `;
-
-    const response = await ai.models.generateContent({
-      model: this.MODEL_MAPS,
-      contents: prompt,
-      config: {
-        tools: [{ googleMaps: {} }] as any,
-        toolConfig: {
-          retrievalConfig: {
-            latLng: userLocation ? { latitude: userLocation.lat, longitude: userLocation.lng } : undefined
-          }
-        } as any
-      }
-    });
-
-    const sources: GroundingSource[] = [];
-    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-    
-    if (chunks) {
-      chunks.forEach((chunk: any) => {
-        if (chunk.maps) {
-          sources.push({
-            title: chunk.maps.title || "Abrir no Google Maps",
-            uri: chunk.maps.uri
-          });
-        }
-      });
-    }
-
-    return {
-      text: response.text || "Não foi possível gerar a análise logística no momento.",
-      sources: sources
-    };
   }
 }
 
