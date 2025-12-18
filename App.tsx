@@ -61,12 +61,9 @@ const App: React.FC = () => {
         setCurrentUser(user);
         setAuthChecked(true);
         if (user) {
-          // SE FOR COLABORADOR, FORÇA ABA DO PDV E BLOQUEIA RESTO
+          // SE FOR COLABORADOR, FORÇA ABA DO PDV
           if (user.role === 'COLLABORATOR') {
             setActiveTab(ActiveTab.PDV);
-          } else if (activeTab === ActiveTab.INPUT) {
-             // Redireciona para PDV como default se for colaborador tentando acessar algo restrito
-             // (embora os botões já sumam, é uma camada extra de segurança)
           }
           setIsLoading(true);
           const txs = await db.getTransactions();
@@ -101,15 +98,22 @@ const App: React.FC = () => {
   const handleAddTransactions = async (newTxs: Transaction[]) => {
     setIsLoading(true);
     try {
-      const savedTxs: Transaction[] = [];
+      const savedResults: Transaction[] = [];
       for (const t of newTxs) {
         const saved = await db.addTransaction({ ...t, userId: currentUser?.id });
-        if (saved) savedTxs.push(saved);
+        if (saved) {
+          savedResults.push(saved);
+        }
       }
-      setTransactions((prev) => [...prev, ...savedTxs]);
+      
+      // Atualiza o estado local IMEDIATAMENTE com os resultados retornados pelo DB
+      setTransactions((prev) => [...prev, ...savedResults]);
     } catch (error: any) {
+      console.error("Erro ao adicionar transação:", error);
       if (error.message?.includes('reviewed')) setIsDatabaseReady(false);
-    } finally { setIsLoading(false); }
+    } finally { 
+      setIsLoading(false); 
+    }
   };
 
   const handleRenameCategory = async (type: TransactionType, oldName: string, newName: string) => {
@@ -155,7 +159,7 @@ const App: React.FC = () => {
     return transactions.reduce((acc, t) => {
       const tDate = new Date(t.date + 'T12:00:00');
       if (tDate < firstDayOfSelectedMonth) {
-        return acc + (t.type === TransactionType.INCOME ? t.amount : -t.amount);
+        return acc + (t.type === TransactionType.INCOME ? Number(t.amount) : -Number(t.amount));
       }
       return acc;
     }, systemBaselineBalance);
@@ -166,8 +170,8 @@ const App: React.FC = () => {
     return d.getMonth() === selectedMonthIndex && d.getFullYear() === selectedYear;
   });
 
-  const monthIncome = currentMonthTxs.filter(t => t.type === TransactionType.INCOME).reduce((s, t) => s + t.amount, 0);
-  const monthExpense = currentMonthTxs.filter(t => t.type === TransactionType.EXPENSE).reduce((s, t) => s + t.amount, 0);
+  const monthIncome = currentMonthTxs.filter(t => t.type === TransactionType.INCOME).reduce((s, t) => s + Number(t.amount), 0);
+  const monthExpense = currentMonthTxs.filter(t => t.type === TransactionType.EXPENSE).reduce((s, t) => s + Number(t.amount), 0);
   const closingBalance = previousBalance + monthIncome - monthExpense;
 
   if (!authChecked) return null;

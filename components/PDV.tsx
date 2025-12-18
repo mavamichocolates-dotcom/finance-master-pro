@@ -69,17 +69,23 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
   };
 
   const total = useMemo(() => {
-    const v = parseFloat(baseValue.replace(',', '.')) || 0;
-    const a = parseFloat(additional.replace(',', '.')) || 0;
-    const f = parseFloat(frete.replace(',', '.')) || 0;
-    const d = parseFloat(discount.replace(',', '.')) || 0;
+    const v = parseFloat(baseValue.toString().replace(',', '.')) || 0;
+    const a = parseFloat(additional.toString().replace(',', '.')) || 0;
+    const f = parseFloat(frete.toString().replace(',', '.')) || 0;
+    const d = parseFloat(discount.toString().replace(',', '.')) || 0;
     return v + a + f - d;
   }, [baseValue, additional, frete, discount]);
 
+  // Filtro inteligente para transações do PDV (usa metadados ou prefixo de descrição)
+  const pdvTransactions = useMemo(() => {
+    return existingTransactions.filter(t => t.pdvData || t.description.startsWith('PDV:'));
+  }, [existingTransactions]);
+
   const dailyReport = useMemo(() => {
-    const dayTxs = existingTransactions.filter(t => t.date === date && t.pdvData);
-    const gross = dayTxs.reduce((s, t) => s + t.amount, 0);
+    const dayTxs = pdvTransactions.filter(t => t.date === date);
+    const gross = dayTxs.reduce((s, t) => s + (Number(t.amount) || 0), 0);
     const cost = dayTxs.reduce((s, t) => s + (t.pdvData?.productCost || 0), 0);
+    
     return { 
         gross, cost, net: gross - cost, 
         count: dayTxs.length,
@@ -88,7 +94,18 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
             return data && (data.deliveryAddress || (data.region && data.region !== 'Loja / Balcão'));
         })
     };
-  }, [existingTransactions, date]);
+  }, [pdvTransactions, date]);
+
+  const recentOrders = useMemo(() => {
+    return [...pdvTransactions]
+      .sort((a, b) => {
+        const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+        if (dateDiff !== 0) return dateDiff;
+        // Se a data for igual, ordena pelo tempo de criação ou ID
+        return (b.createdAt || b.id).localeCompare(a.createdAt || a.id);
+      })
+      .slice(0, 30);
+  }, [pdvTransactions]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,14 +120,15 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
       date: date,
       status: PaymentStatus.PAID,
       reviewed: true,
+      createdAt: new Date().toISOString(),
       pdvData: {
         deliveryDate, contact, region, deliveryAddress,
         productCode, productName, paymentMethod,
-        baseValue: parseFloat(baseValue.replace(',', '.')),
-        productCost: parseFloat(productCost.replace(',', '.')) || 0,
-        additional: parseFloat(additional.replace(',', '.')),
-        frete: parseFloat(frete.replace(',', '.')),
-        discount: parseFloat(discount.replace(',', '.')),
+        baseValue: parseFloat(baseValue.toString().replace(',', '.')),
+        productCost: parseFloat(productCost.toString().replace(',', '.')) || 0,
+        additional: parseFloat(additional.toString().replace(',', '.')),
+        frete: parseFloat(frete.toString().replace(',', '.')),
+        discount: parseFloat(discount.toString().replace(',', '.')),
       }
     };
 
@@ -118,8 +136,17 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 2500);
     
-    setContact(''); setRegion(''); setDeliveryAddress(''); setProductCode(''); setProductName('');
-    setBaseValue(''); setProductCost(''); setAdditional(''); setFrete(''); setDiscount('');
+    // Limpar campos exceto as datas de hoje para agilizar próximos lançamentos
+    setContact(''); 
+    setRegion(''); 
+    setDeliveryAddress(''); 
+    setProductCode(''); 
+    setProductName('');
+    setBaseValue(''); 
+    setProductCost(''); 
+    setAdditional(''); 
+    setFrete(''); 
+    setDiscount('');
   };
 
   const handleOptimizeRoutes = async () => {
@@ -198,7 +225,7 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
             {showSuccess && (
               <div className="bg-emerald-500/10 border border-emerald-500/40 p-4 rounded-2xl flex items-center gap-3 text-emerald-400 animate-fade-in-up">
                 <CheckCircle2 size={20} />
-                <span className="text-sm font-black uppercase">Venda registrada!</span>
+                <span className="text-sm font-black uppercase">Venda registrada com sucesso!</span>
               </div>
             )}
 
@@ -254,18 +281,22 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
                <button onClick={() => window.print()} className="bg-gray-900 p-2.5 rounded-xl text-gray-500 hover:text-white border border-gray-700"><Printer size={18} /></button>
             </div>
             <div className="flex-grow overflow-y-auto custom-scrollbar">
-                {existingTransactions.filter(t => t.pdvData).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 20).map(t => (
-                    <div key={t.id} className="p-4 border-b border-gray-700/30 flex justify-between items-center group">
+                {recentOrders.length === 0 ? (
+                  <div className="p-10 text-center text-gray-500 italic text-sm">Nenhum pedido registrado hoje.</div>
+                ) : (
+                  recentOrders.map(t => (
+                    <div key={t.id} className="p-4 border-b border-gray-700/30 flex justify-between items-center group hover:bg-gray-700/20 transition-colors">
                         <div className="min-w-0">
-                            <p className="font-black text-white text-sm truncate uppercase tracking-tight mb-1">{t.pdvData?.productName}</p>
-                            <p className="text-[10px] text-gray-500 truncate"><MapPin size={8} className="inline mr-1" /> {t.pdvData?.deliveryAddress || t.pdvData?.region}</p>
+                            <p className="font-black text-white text-sm truncate uppercase tracking-tight mb-1">{t.pdvData?.productName || t.description.replace('PDV: ', '')}</p>
+                            <p className="text-[10px] text-gray-500 truncate"><MapPin size={8} className="inline mr-1" /> {t.pdvData?.deliveryAddress || t.pdvData?.region || 'Balcão'}</p>
                         </div>
                         <div className="text-right ml-4">
                             <div className="font-black text-white text-base leading-none mb-1">{formatCurrency(t.amount)}</div>
                             <div className="text-[9px] text-gray-500 uppercase">{formatDate(t.date)}</div>
                         </div>
                     </div>
-                ))}
+                  ))
+                )}
             </div>
         </div>
       </div>
