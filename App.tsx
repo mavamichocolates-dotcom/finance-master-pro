@@ -7,18 +7,20 @@ import TransactionForm from './components/TransactionForm';
 import Dashboard from './components/Dashboard';
 import TransactionTable from './components/TransactionTable';
 import PDV from './components/PDV';
+import CalendarView from './components/CalendarView';
 import SummaryCard from './components/SummaryCard';
 import ConfirmModal from './components/ConfirmModal';
 import Login from './components/Login';
 import UserManagement from './components/UserManagement';
 import { formatCurrency, formatDate } from './utils';
-import { LayoutDashboard, Wallet, Receipt, TrendingUp, TrendingDown, DollarSign, LogOut, Loader2, Database, ChevronLeft, ChevronRight, PiggyBank, Edit3, Users, Cloud, CloudOff, ShoppingCart } from 'lucide-react';
+import { LayoutDashboard, Wallet, Receipt, TrendingUp, TrendingDown, DollarSign, LogOut, Loader2, Database, ChevronLeft, ChevronRight, PiggyBank, Edit3, Users, Cloud, CloudOff, ShoppingCart, CalendarDays } from 'lucide-react';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, MONTH_NAMES, SINGLE_STORE_NAME } from './constants';
 import { isSupabaseConfigured } from './src/supabase';
 
 enum ActiveTab {
   INPUT = 'INPUT',
   PDV = 'PDV',
+  CALENDAR = 'CALENDAR',
   DASHBOARD = 'DASHBOARD',
   MANAGEMENT = 'MANAGEMENT',
   USERS = 'USERS',
@@ -61,7 +63,6 @@ const App: React.FC = () => {
         setCurrentUser(user);
         setAuthChecked(true);
         if (user) {
-          // SE FOR COLABORADOR, FORÇA ABA DO PDV
           if (user.role === 'COLLABORATOR') {
             setActiveTab(ActiveTab.PDV);
           }
@@ -105,8 +106,6 @@ const App: React.FC = () => {
           savedResults.push(saved);
         }
       }
-      
-      // Atualiza o estado local IMEDIATAMENTE com os resultados retornados pelo DB
       setTransactions((prev) => [...prev, ...savedResults]);
     } catch (error: any) {
       console.error("Erro ao adicionar transação:", error);
@@ -226,6 +225,7 @@ const App: React.FC = () => {
                   <>
                     <TabButton active={activeTab === ActiveTab.INPUT} onClick={() => setActiveTab(ActiveTab.INPUT)} icon={<Wallet size={18} />} label="Entradas" />
                     <TabButton active={activeTab === ActiveTab.MANAGEMENT} onClick={() => setActiveTab(ActiveTab.MANAGEMENT)} icon={<Receipt size={18} />} label="Gestão" />
+                    <TabButton active={activeTab === ActiveTab.CALENDAR} onClick={() => setActiveTab(ActiveTab.CALENDAR)} icon={<CalendarDays size={18} />} label="Agenda" />
                     <TabButton active={activeTab === ActiveTab.DASHBOARD} onClick={() => setActiveTab(ActiveTab.DASHBOARD)} icon={<TrendingUp size={18} />} label="Fluxo" />
                     <TabButton active={activeTab === ActiveTab.PDV} onClick={() => setActiveTab(ActiveTab.PDV)} icon={<ShoppingCart size={18} />} label="PDV" />
                     {isAdmin && <TabButton active={activeTab === ActiveTab.USERS} onClick={() => setActiveTab(ActiveTab.USERS)} icon={<Users size={18} />} label="Usuários" />}
@@ -247,7 +247,7 @@ const App: React.FC = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8 flex flex-col gap-6">
-        {activeTab !== ActiveTab.USERS && activeTab !== ActiveTab.PDV && !isCollaborator && (
+        {activeTab !== ActiveTab.USERS && activeTab !== ActiveTab.PDV && activeTab !== ActiveTab.CALENDAR && !isCollaborator && (
           <>
             <div className="flex justify-between items-center bg-gray-800/50 border border-gray-700/50 rounded-xl px-6 py-3">
               <div className="flex items-center gap-2 text-gray-400">
@@ -283,6 +283,7 @@ const App: React.FC = () => {
 
         {activeTab === ActiveTab.INPUT && !isCollaborator && <TransactionForm onAddTransaction={handleAddTransactions} incomeCategories={categories.income} expenseCategories={categories.expense} onAddCategory={(t, c) => setCategories((p: any) => ({...p, [t === TransactionType.INCOME ? 'income' : 'expense']: [...p[t === TransactionType.INCOME ? 'income' : 'expense'], c]}))} onRenameCategory={handleRenameCategory} onDeleteCategory={handleDeleteCategory} units={units} onAddUnit={() => {}} onRenameUnit={() => {}} onDeleteUnit={() => {}} existingTransactions={transactions} />}
         {activeTab === ActiveTab.PDV && <PDV onAddTransaction={handleAddTransactions} existingTransactions={transactions} />}
+        {activeTab === ActiveTab.CALENDAR && <CalendarView transactions={transactions} />}
         {activeTab === ActiveTab.MANAGEMENT && !isCollaborator && <TransactionTable transactions={transactions} onDelete={(id) => db.deleteTransaction(id).then(() => setTransactions(p => p.filter(t => t.id !== id)))} onDeleteMany={() => {}} onUpdate={handleUpdateTransaction} units={units} incomeCategories={categories.income} expenseCategories={categories.expense} />}
         {activeTab === ActiveTab.DASHBOARD && !isCollaborator && <Dashboard transactions={transactions} units={units} />}
         {activeTab === ActiveTab.USERS && isAdmin && <UserManagement availableUnits={units} />}
