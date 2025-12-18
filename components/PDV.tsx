@@ -6,7 +6,7 @@ import {
   Save, ShoppingCart, User, MapPin, Tag, Package, CreditCard, 
   Plus, Trash2, Search, TrendingUp, 
   Calendar, Settings2, X, BarChart3, ReceiptText, Printer, CheckCircle2,
-  TrendingDown, Percent
+  TrendingDown, Percent, MapPinned
 } from 'lucide-react';
 
 interface PDVProps {
@@ -21,7 +21,7 @@ interface ProductInfo {
   cost: number;
 }
 
-const REGION_SUGGESTIONS = [
+const INITIAL_REGIONS = [
   'Zona Leste',
   'Zona Oeste',
   'Zona Norte',
@@ -36,73 +36,27 @@ const REGION_SUGGESTIONS = [
 ];
 
 const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => {
-  // Catálogo persistente em localStorage com os dados fornecidos pelo usuário
+  // Catálogo persistente em localStorage
   const [catalog, setCatalog] = useState<ProductInfo[]>(() => {
     const saved = localStorage.getItem('fm_pdv_catalog');
     if (saved) return JSON.parse(saved);
+    return [];
+  });
 
-    // Lista oficial de produtos Mirella Doces
-    return [
-      { code: 'A01', name: 'Mini Buquê Delicadeza', price: 110.00, cost: 28.31 },
-      { code: 'A02', name: 'Mini Ferrero com Rosa', price: 100.00, cost: 32.30 },
-      { code: 'A03', name: 'Mini Buquê Carinho', price: 115.00, cost: 29.91 },
-      { code: 'A04', name: 'Mini Buquê Namorar', price: 130.00, cost: 32.42 },
-      { code: 'A05', name: 'Mini Buquê Encanto', price: 90.00, cost: 22.05 },
-      { code: 'A06', name: 'Mini Buquê Alegria', price: 110.00, cost: 28.31 },
-      { code: 'A08', name: 'Buque Amante de Chocolate', price: 160.00, cost: 46.90 },
-      { code: 'A09', name: 'Buquê Emoção', price: 210.00, cost: 67.45 },
-      { code: 'A10', name: 'Buquê União', price: 180.00, cost: 54.71 },
-      { code: 'A11', name: 'Buquê Branco', price: 190.00, cost: 57.81 },
-      { code: 'A12', name: 'Buque Charme', price: 209.00, cost: 68.84 },
-      { code: 'A13', name: 'Buquê Te Adoro', price: 190.00, cost: 61.12 },
-      { code: 'A14', name: 'Buquê Callebaut', price: 185.00, cost: 61.98 },
-      { code: 'A15', name: 'Buquê Rosa', price: 180.00, cost: 51.10 },
-      { code: 'A16', name: 'Buque Conquista', price: 180.00, cost: 55.23 },
-      { code: 'A17', name: 'Buque Branco', price: 185.00, cost: 57.81 },
-      { code: 'A19', name: 'Buque Amor Infinito', price: 250.00, cost: 69.91 },
-      { code: 'A20', name: 'Buquê Sonho de Amor', price: 250.00, cost: 84.91 },
-      { code: 'A21', name: 'Buquê Fidelidade', price: 390.00, cost: 119.16 },
-      { code: 'A22', name: 'Buquê Prosperidade', price: 290.00, cost: 104.91 },
-      { code: 'A23', name: 'Buquê Felicidade', price: 350.00, cost: 102.09 },
-      { code: 'A26', name: 'Buquê Ternura', price: 195.00, cost: 69.80 },
-      { code: 'A27', name: 'Buquê Love', price: 259.70, cost: 101.75 },
-      { code: 'A28', name: 'Buquê Coração G 23F 12R', price: 380.00, cost: 126.74 },
-      { code: 'A29', name: 'Buquê Fascínio', price: 180.00, cost: 64.80 },
-      { code: 'A30', name: 'Buquê Ouro Branco', price: 170.00, cost: 29.00 },
-      { code: 'A31', name: 'Buquê Sonho de Valsa', price: 170.00, cost: 29.00 },
-      { code: 'A32', name: 'Buquê Mega Ferrero Rocher', price: 290.00, cost: 128.05 },
-      { code: 'A33', name: 'Kit Mini Buque e Rosa', price: 110.00, cost: 29.88 },
-      { code: 'A34', name: 'Mini Buque Coração 14F-5R', price: 190.00, cost: 58.66 },
-      { code: 'A35', name: 'Mini Buque Coração P-12F 3R', price: 170.00, cost: 55.00 },
-      { code: 'A36', name: 'Buquê Amor', price: 660.00, cost: 277.99 },
-      { code: 'A37', name: 'Buquê Apaixonado', price: 380.00, cost: 136.95 },
-      { code: 'A38', name: 'Buquê Realeza', price: 660.00, cost: 134.29 },
-      { code: 'A39', name: 'Buquê Harmonia', price: 590.00, cost: 113.85 },
-      { code: 'A40', name: 'Mini Buque Coração 12F-3R', price: 170.00, cost: 45.00 },
-      { code: 'A43', name: 'Buquê Colombiano 6 Rosas', price: 125.00, cost: 28.94 },
-      { code: 'A44', name: 'Buquê Colombiano 12 Rosas', price: 219.00, cost: 56.79 },
-      { code: 'A45', name: 'Buque Callebaut com balão', price: 198.00, cost: 64.00 },
-      { code: 'A49', name: 'Caixa de Ferrero com Rosa', price: 90.00, cost: 20.72 },
-      { code: 'A50', name: 'Caixa de Morango com Rosa', price: 85.00, cost: 15.93 },
-      { code: 'A52', name: 'Buque Sonho de Mulher', price: 1000.00, cost: 217.88 },
-      { code: 'A53', name: 'Buque Sunflowers', price: 1399.00, cost: 374.34 },
-      { code: 'A57', name: 'Buque Pistache', price: 185.00, cost: 45.00 },
-      { code: 'A58', name: 'Mini Buque Branco', price: 90.00, cost: 11.57 },
-      { code: 'A59', name: 'Mini Buque Amor', price: 95.00, cost: 16.00 },
-      { code: 'A60', name: 'Saco de Pétalas', price: 30.00, cost: 6.00 },
-      { code: 'A62', name: 'Mini Buque Doce Encanto', price: 130.00, cost: 20.00 },
-      { code: 'A63', name: 'Buque Surpresa de Amor', price: 210.00, cost: 56.00 },
-      { code: 'A64', name: 'Mini Buque Mesclado Raf/Fer', price: 84.90, cost: 16.00 },
-      { code: 'A65', name: 'Buque Segredo de Cacau', price: 170.00, cost: 32.00 },
-      { code: 'A68', name: '6 Morangos 6 Rosas', price: 132.00, cost: 34.94 },
-      { code: 'A69', name: 'Ferrero Love', price: 79.00, cost: 22.18 },
-      { code: 'A70', name: 'Buquês Mentoria', price: 75.00, cost: 10.00 },
-    ];
+  // Regiões/Bairros persistentes em localStorage
+  const [regions, setRegions] = useState<string[]>(() => {
+    const saved = localStorage.getItem('fm_pdv_regions');
+    if (saved) return JSON.parse(saved);
+    return INITIAL_REGIONS;
   });
 
   useEffect(() => {
     localStorage.setItem('fm_pdv_catalog', JSON.stringify(catalog));
   }, [catalog]);
+
+  useEffect(() => {
+    localStorage.setItem('fm_pdv_regions', JSON.stringify(regions));
+  }, [regions]);
 
   // Estados do Form
   const [date, setDate] = useState(getTodayString());
@@ -185,6 +139,12 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
 
     onAddTransaction([newTransaction]);
     
+    // Se a região for nova, adiciona automaticamente (opcional, mas prático)
+    const trimmedRegion = region.trim();
+    if (trimmedRegion && !regions.includes(trimmedRegion)) {
+        setRegions(prev => [...prev, trimmedRegion]);
+    }
+
     // Feedback visual e Reset seletivo
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 2500);
@@ -261,7 +221,7 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
               onClick={() => setIsCatalogModalOpen(true)}
               className="text-[10px] font-black bg-gray-900 text-gray-300 px-5 py-2.5 rounded-2xl hover:bg-gray-700 border border-gray-700 transition-all flex items-center gap-2 shadow-sm uppercase"
             >
-              <Settings2 size={14} /> Catálogo
+              <Settings2 size={14} /> Catálogo & Bairros
             </button>
           </div>
           
@@ -292,11 +252,11 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
                   value={productCode} 
                   onChange={e => handleCodeChange(e.target.value)} 
                   className="custom-pdv-input border-indigo-500/40 text-indigo-400 font-black uppercase" 
-                  placeholder="A16" 
+                  placeholder="Ex: A01" 
                 />
               </InputGroup>
               <InputGroup label="Nome do Produto" icon={<Package size={14} />} className="md:col-span-6">
-                <input type="text" required value={productName} onChange={e => setProductName(e.target.value)} className="custom-pdv-input font-bold" placeholder="Digite o buquê..." />
+                <input type="text" required value={productName} onChange={e => setProductName(e.target.value)} className="custom-pdv-input font-bold" placeholder="Digite o nome do produto..." />
               </InputGroup>
               <InputGroup label="Bairro / Cidade / Região" icon={<MapPin size={14} />} className="md:col-span-4">
                 <input 
@@ -308,7 +268,7 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
                   placeholder="Ex: Zona Leste, Itaquera..."
                 />
                 <datalist id="regions-list-pdv">
-                  {REGION_SUGGESTIONS.map(reg => (
+                  {regions.map(reg => (
                     <option key={reg} value={reg}>{reg}</option>
                   ))}
                 </datalist>
@@ -398,7 +358,13 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
       </div>
 
       {isCatalogModalOpen && (
-        <CatalogManager items={catalog} onClose={() => setIsCatalogModalOpen(false)} onSave={setCatalog} />
+        <CatalogManager 
+            items={catalog} 
+            regions={regions} 
+            onClose={() => setIsCatalogModalOpen(false)} 
+            onSaveItems={setCatalog} 
+            onSaveRegions={setRegions} 
+        />
       )}
 
       <style>{`
@@ -462,28 +428,54 @@ const PriceInput = ({ label, value, onChange, color = "text-white", compact }: a
   </div>
 );
 
-const CatalogManager: React.FC<any> = ({ items, onClose, onSave }) => {
+const CatalogManager: React.FC<any> = ({ items, regions, onClose, onSaveItems, onSaveRegions }) => {
+  const [activeTab, setActiveTab] = useState<'PRODUCTS' | 'REGIONS'>('PRODUCTS');
   const [localItems, setLocalItems] = useState(items);
+  const [localRegions, setLocalRegions] = useState(regions);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // States para novo produto
   const [newItem, setNewItem] = useState<ProductInfo>({ code: '', name: '', price: 0, cost: 0 });
+  
+  // State para novo bairro
+  const [newRegion, setNewRegion] = useState('');
 
   const filteredItems = localItems.filter((i: any) => 
     i.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     i.code.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const filteredRegions = localRegions.filter((r: string) => 
+    r.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   const addItem = () => {
     if (!newItem.code || !newItem.name) return;
     const updated = [...localItems, newItem];
     setLocalItems(updated);
-    onSave(updated);
+    onSaveItems(updated);
     setNewItem({ code: '', name: '', price: 0, cost: 0 });
   };
 
   const removeItem = (code: string) => {
     const updated = localItems.filter((i: any) => i.code !== code);
     setLocalItems(updated);
-    onSave(updated);
+    onSaveItems(updated);
+  };
+
+  const addRegion = () => {
+    const trimmed = newRegion.trim();
+    if (!trimmed || localRegions.includes(trimmed)) return;
+    const updated = [...localRegions, trimmed];
+    setLocalRegions(updated);
+    onSaveRegions(updated);
+    setNewRegion('');
+  };
+
+  const removeRegion = (reg: string) => {
+    const updated = localRegions.filter((r: string) => r !== reg);
+    setLocalRegions(updated);
+    onSaveRegions(updated);
   };
 
   return (
@@ -492,47 +484,108 @@ const CatalogManager: React.FC<any> = ({ items, onClose, onSave }) => {
         <div className="flex justify-between items-center p-8 border-b border-gray-800 bg-gray-900/50">
            <div className="flex items-center gap-4">
               <div className="bg-indigo-600/20 p-3 rounded-2xl border border-indigo-500/30">
-                <Tag className="text-indigo-500" size={24} />
+                {activeTab === 'PRODUCTS' ? <Tag className="text-indigo-500" size={24} /> : <MapPinned className="text-indigo-500" size={24} />}
               </div>
               <div>
-                <h3 className="text-2xl font-black text-white tracking-tighter uppercase">Gestão de Itens</h3>
-                <p className="text-xs text-gray-500 font-bold">Configure códigos e preços automáticos</p>
+                <h3 className="text-2xl font-black text-white tracking-tighter uppercase">{activeTab === 'PRODUCTS' ? 'Gestão de Itens' : 'Gestão de Bairros'}</h3>
+                <p className="text-xs text-gray-500 font-bold">Configure opções automáticas do PDV</p>
               </div>
            </div>
            <button onClick={onClose} className="text-gray-500 hover:text-white transition-all bg-gray-800 p-3 rounded-2xl border border-gray-700">
              <X size={20} />
            </button>
         </div>
+
+        {/* NAVEGAÇÃO INTERNA */}
+        <div className="flex bg-gray-950 p-1 mx-8 mt-4 rounded-2xl border border-gray-800">
+            <button 
+                onClick={() => setActiveTab('PRODUCTS')}
+                className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'PRODUCTS' ? 'bg-indigo-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}
+            >
+                Produtos
+            </button>
+            <button 
+                onClick={() => setActiveTab('REGIONS')}
+                className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'REGIONS' ? 'bg-indigo-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}
+            >
+                Bairros / Regiões
+            </button>
+        </div>
+
         <div className="p-8 overflow-y-auto custom-scrollbar flex-grow space-y-10">
-          <div className="bg-indigo-600/5 p-8 rounded-[2rem] border border-indigo-500/20">
-            <h4 className="text-[10px] font-black text-indigo-400 uppercase mb-6 tracking-[0.2em] flex items-center gap-2">
-              <Plus size={14} /> Novo Produto no Catálogo
-            </h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <input type="text" placeholder="CÓDIGO" value={newItem.code} onChange={e => setNewItem({...newItem, code: e.target.value})} className="custom-pdv-input text-xs uppercase font-black" />
-              <input type="text" placeholder="NOME BUQUÊ" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} className="custom-pdv-input text-xs font-bold" />
-              <input type="number" placeholder="VENDA" value={newItem.price || ''} onChange={e => setNewItem({...newItem, price: parseFloat(e.target.value)})} className="custom-pdv-input text-xs" />
-              <input type="number" placeholder="CUSTO" value={newItem.cost || ''} onChange={e => setNewItem({...newItem, cost: parseFloat(e.target.value)})} className="custom-pdv-input text-xs" />
-              <button onClick={addItem} className="col-span-full bg-indigo-600 text-white font-black py-4 rounded-2xl text-[11px] uppercase tracking-[0.1em] hover:bg-indigo-500 transition-all">Salvar no Catálogo</button>
-            </div>
-          </div>
-          <div className="space-y-6">
-            <div className="flex justify-between items-center px-2">
-              <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em]">Cadastrados ({localItems.length})</h4>
-              <input type="text" placeholder="BUSCAR..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="bg-gray-800 border border-gray-700 rounded-2xl px-6 py-2 text-[10px] font-bold outline-none" />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredItems.map((item: any) => (
-                <div key={item.code} className="bg-gray-850/30 border border-gray-800 rounded-[1.5rem] p-5 flex justify-between items-center hover:bg-gray-800/50 transition-all">
-                  <div>
-                    <span className="text-[11px] font-black text-indigo-400 bg-indigo-900/30 px-3 py-1 rounded-lg mr-3">{item.code}</span>
-                    <span className="text-sm font-black text-white uppercase">{item.name}</span>
-                  </div>
-                  <button onClick={() => removeItem(item.code)} className="text-gray-700 hover:text-rose-500"><Trash2 size={18} /></button>
+          
+          {/* SEÇÃO PRODUTOS */}
+          {activeTab === 'PRODUCTS' && (
+              <>
+                <div className="bg-indigo-600/5 p-8 rounded-[2rem] border border-indigo-500/20">
+                    <h4 className="text-[10px] font-black text-indigo-400 uppercase mb-6 tracking-[0.2em] flex items-center gap-2">
+                    <Plus size={14} /> Novo Produto no Catálogo
+                    </h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <input type="text" placeholder="CÓDIGO" value={newItem.code} onChange={e => setNewItem({...newItem, code: e.target.value})} className="custom-pdv-input text-xs uppercase font-black" />
+                    <input type="text" placeholder="NOME BUQUÊ" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} className="custom-pdv-input text-xs font-bold" />
+                    <input type="number" placeholder="VENDA" value={newItem.price || ''} onChange={e => setNewItem({...newItem, price: parseFloat(e.target.value)})} className="custom-pdv-input text-xs" />
+                    <input type="number" placeholder="CUSTO" value={newItem.cost || ''} onChange={e => setNewItem({...newItem, cost: parseFloat(e.target.value)})} className="custom-pdv-input text-xs" />
+                    <button onClick={addItem} className="col-span-full bg-indigo-600 text-white font-black py-4 rounded-2xl text-[11px] uppercase tracking-[0.1em] hover:bg-indigo-500 transition-all">Salvar no Catálogo</button>
+                    </div>
                 </div>
-              ))}
-            </div>
-          </div>
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center px-2">
+                    <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em]">Cadastrados ({localItems.length})</h4>
+                    <input type="text" placeholder="BUSCAR..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="bg-gray-800 border border-gray-700 rounded-2xl px-6 py-2 text-[10px] font-bold outline-none" />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {filteredItems.map((item: any) => (
+                        <div key={item.code} className="bg-gray-850/30 border border-gray-800 rounded-[1.5rem] p-5 flex justify-between items-center hover:bg-gray-800/50 transition-all">
+                        <div>
+                            <span className="text-[11px] font-black text-indigo-400 bg-indigo-900/30 px-3 py-1 rounded-lg mr-3">{item.code}</span>
+                            <span className="text-sm font-black text-white uppercase">{item.name}</span>
+                        </div>
+                        <button onClick={() => removeItem(item.code)} className="text-gray-700 hover:text-rose-500"><Trash2 size={18} /></button>
+                        </div>
+                    ))}
+                    </div>
+                </div>
+              </>
+          )}
+
+          {/* SEÇÃO REGIÕES */}
+          {activeTab === 'REGIONS' && (
+              <>
+                <div className="bg-indigo-600/5 p-8 rounded-[2rem] border border-indigo-500/20">
+                    <h4 className="text-[10px] font-black text-indigo-400 uppercase mb-6 tracking-[0.2em] flex items-center gap-2">
+                    <Plus size={14} /> Adicionar Novo Bairro / Região
+                    </h4>
+                    <div className="flex gap-4">
+                        <input 
+                            type="text" 
+                            placeholder="NOME DO BAIRRO EX: ITAQUERA" 
+                            value={newRegion} 
+                            onChange={e => setNewRegion(e.target.value)} 
+                            className="custom-pdv-input text-xs font-bold uppercase" 
+                        />
+                        <button onClick={addRegion} className="bg-indigo-600 text-white font-black py-4 px-8 rounded-2xl text-[11px] uppercase tracking-[0.1em] hover:bg-indigo-500 transition-all whitespace-nowrap">
+                            Adicionar
+                        </button>
+                    </div>
+                </div>
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center px-2">
+                    <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em]">Bairros Salvos ({localRegions.length})</h4>
+                    <input type="text" placeholder="BUSCAR..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="bg-gray-800 border border-gray-700 rounded-2xl px-6 py-2 text-[10px] font-bold outline-none" />
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {filteredRegions.map((reg: string) => (
+                        <div key={reg} className="bg-gray-850/30 border border-gray-800 rounded-[1.2rem] p-4 flex justify-between items-center hover:bg-gray-800/50 transition-all">
+                            <span className="text-xs font-black text-white uppercase truncate">{reg}</span>
+                            <button onClick={() => removeRegion(reg)} className="text-gray-700 hover:text-rose-500 ml-2"><Trash2 size={16} /></button>
+                        </div>
+                    ))}
+                    </div>
+                </div>
+              </>
+          )}
+
         </div>
         <div className="p-8 bg-gray-950/50 border-t border-gray-800 text-center">
            <button onClick={onClose} className="bg-gray-100 text-gray-950 font-black py-4 px-16 rounded-2xl text-[11px] uppercase tracking-[0.2em]">Concluir Edição</button>
