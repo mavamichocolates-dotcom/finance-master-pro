@@ -31,7 +31,8 @@ class DBService {
       reviewed: !!t.reviewed,
       unit: t.store_name, 
       userId: t.user_id, 
-      createdAt: t.created_at
+      createdAt: t.created_at,
+      pdvData: t.pdv_data // Mapeamento correto do JSON vindo do banco
     }));
   }
 
@@ -54,7 +55,8 @@ class DBService {
       category: t.category,
       date: t.date,
       status: t.status,
-      reviewed: !!t.reviewed
+      reviewed: !!t.reviewed,
+      pdv_data: t.pdvData // Persistência do objeto de metadados do PDV
     };
 
     const { data, error } = await supabase.from('transactions').insert(dbTx).select().single();
@@ -77,7 +79,8 @@ class DBService {
       category: t.category, 
       date: t.date, 
       status: t.status, 
-      reviewed: !!t.reviewed
+      reviewed: !!t.reviewed,
+      pdv_data: t.pdvData
     };
 
     const { error } = await supabase.from('transactions').update(dbTx).eq('id', t.id);
@@ -132,15 +135,12 @@ class DBService {
   }
 
   async clearAllData(): Promise<void> {
-    // 1. Limpar LocalStorage
     localStorage.removeItem('fm_local_transactions');
     localStorage.removeItem('fm_baseline_balance');
     localStorage.removeItem('finance_categories');
     localStorage.removeItem('fm_learned_patterns');
 
-    // 2. Limpar Nuvem (Se configurado)
     if (isSupabaseConfigured) {
-      // Deletar transações (CUIDADO: Isso limpa a tabela inteira)
       const { error: txError } = await supabase.from('transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       if (txError) console.error("Erro ao limpar transações na nuvem", txError);
     }

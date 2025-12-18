@@ -35,6 +35,7 @@ export interface Transaction {
     productName?: string;
     paymentMethod?: string;
     baseValue?: number;
+    productCost?: number; // Custo do produto para cálculo de lucro
     additional?: number;
     frete?: number;
     discount?: number;
