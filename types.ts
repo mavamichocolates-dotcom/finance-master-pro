@@ -17,14 +17,28 @@ export interface Transaction {
   category: string;
   date: string; // ISO Date string YYYY-MM-DD
   status: PaymentStatus;
-  reviewed?: boolean; // Indica se o usuário validou manualmente
+  reviewed?: boolean;
   installments?: {
     current: number;
     total: number;
   };
-  unit?: string; // e.g., "Loja Osasco"
-  userId?: string; // ID of the user who created it
+  unit?: string;
+  userId?: string;
   createdAt?: string;
+  
+  // Campos específicos para o PDV (Baseados no print da planilha)
+  pdvData?: {
+    deliveryDate?: string;
+    contact?: string;
+    cepCode?: string;
+    productCode?: string;
+    productName?: string;
+    paymentMethod?: string;
+    baseValue?: number;
+    additional?: number;
+    frete?: number;
+    discount?: number;
+  };
 }
 
 export interface CategoryStats {
@@ -35,13 +49,11 @@ export interface CategoryStats {
 }
 
 export interface MonthlySummary {
-  month: string; // YYYY-MM
+  month: string;
   income: number;
   expense: number;
   balance: number;
 }
-
-// --- Auth Types ---
 
 export type UserRole = 'ADMIN' | 'MANAGER' | 'COLLABORATOR';
 
@@ -50,8 +62,8 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
-  allowedUnits: string[]; // List of unit names this user can access
-  passwordHash?: string; // In a real app, never store plain text. Here we simulate.
+  allowedUnits: string[];
+  passwordHash?: string;
   createdAt: string;
   active: boolean;
 }
