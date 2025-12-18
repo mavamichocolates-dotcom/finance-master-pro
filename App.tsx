@@ -104,6 +104,86 @@ const App: React.FC = () => {
     } finally { setIsLoading(false); }
   };
 
+  const handleDeleteCategory = async (type: TransactionType, categoryName: string) => {
+    if (categoryName === 'Outros') {
+      alert("A categoria 'Outros' é obrigatória e não pode ser removida.");
+      return;
+    }
+
+    const confirm = window.confirm(`Tem certeza que deseja excluir a categoria "${categoryName}"? Todos os lançamentos vinculados a ela serão movidos para "Outros".`);
+    if (!confirm) return;
+
+    setIsLoading(true);
+    try {
+      // 1. Atualizar lista de categorias
+      const typeKey = type === TransactionType.INCOME ? 'income' : 'expense';
+      const updatedCategories = {
+        ...categories,
+        [typeKey]: categories[typeKey].filter((c: string) => c !== categoryName)
+      };
+      setCategories(updatedCategories);
+      localStorage.setItem('finance_categories', JSON.stringify(updatedCategories));
+
+      // 2. Atualizar transações existentes que usavam essa categoria
+      const affectedTxs = transactions.filter(t => t.type === type && t.category === categoryName);
+      if (affectedTxs.length > 0) {
+        const updatedTxsList = [...transactions];
+        for (const t of affectedTxs) {
+          const updated = { ...t, category: 'Outros' };
+          await db.updateTransaction(updated);
+          const index = updatedTxsList.findIndex(tx => tx.id === t.id);
+          if (index !== -1) updatedTxsList[index] = updated;
+        }
+        setTransactions(updatedTxsList);
+      }
+    } catch (error) {
+      console.error("Erro ao excluir categoria:", error);
+      alert("Erro ao processar a exclusão da categoria.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRenameCategory = async (type: TransactionType, oldName: string, newName: string) => {
+    if (oldName === 'Outros') {
+      alert("A categoria 'Outros' não pode ser renomeada.");
+      return;
+    }
+    
+    const trimmedNewName = newName.trim();
+    if (!trimmedNewName || trimmedNewName === oldName) return;
+
+    setIsLoading(true);
+    try {
+      // 1. Atualizar lista
+      const typeKey = type === TransactionType.INCOME ? 'income' : 'expense';
+      const updatedCategories = {
+        ...categories,
+        [typeKey]: categories[typeKey].map((c: string) => c === oldName ? trimmedNewName : c)
+      };
+      setCategories(updatedCategories);
+      localStorage.setItem('finance_categories', JSON.stringify(updatedCategories));
+
+      // 2. Atualizar transações
+      const affectedTxs = transactions.filter(t => t.type === type && t.category === oldName);
+      if (affectedTxs.length > 0) {
+        const updatedTxsList = [...transactions];
+        for (const t of affectedTxs) {
+          const updated = { ...t, category: trimmedNewName };
+          await db.updateTransaction(updated);
+          const index = updatedTxsList.findIndex(tx => tx.id === t.id);
+          if (index !== -1) updatedTxsList[index] = updated;
+        }
+        setTransactions(updatedTxsList);
+      }
+    } catch (error) {
+      console.error("Erro ao renomear categoria:", error);
+      alert("Erro ao processar a renomeação da categoria.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const selectedMonthIndex = currentDate.getMonth();
   const selectedYear = currentDate.getFullYear();
   const selectedMonthName = MONTH_NAMES[selectedMonthIndex];
@@ -227,6 +307,7 @@ const App: React.FC = () => {
                     />
                   ) : (
                     <>
+                      {/* Fix: Changed systemBaselineBaseline to systemBaselineBalance to correct the variable name typo */}
                       <span className="text-sm font-bold text-white">{formatCurrency(systemBaselineBalance)}</span>
                       <Edit3 size={12} className="text-gray-600 group-hover:text-blue-400" />
                     </>
@@ -253,7 +334,7 @@ const App: React.FC = () => {
           </>
         )}
 
-        {activeTab === ActiveTab.INPUT && <TransactionForm onAddTransaction={handleAddTransactions} incomeCategories={categories.income} expenseCategories={categories.expense} onAddCategory={(t, c) => setCategories((p: any) => ({...p, [t === TransactionType.INCOME ? 'income' : 'expense']: [...p[t === TransactionType.INCOME ? 'income' : 'expense'], c]}))} onRenameCategory={() => {}} onDeleteCategory={() => {}} units={units} onAddUnit={() => {}} onRenameUnit={() => {}} onDeleteUnit={() => {}} existingTransactions={transactions} />}
+        {activeTab === ActiveTab.INPUT && <TransactionForm onAddTransaction={handleAddTransactions} incomeCategories={categories.income} expenseCategories={categories.expense} onAddCategory={(t, c) => setCategories((p: any) => ({...p, [t === TransactionType.INCOME ? 'income' : 'expense']: [...p[t === TransactionType.INCOME ? 'income' : 'expense'], c]}))} onRenameCategory={handleRenameCategory} onDeleteCategory={handleDeleteCategory} units={units} onAddUnit={() => {}} onRenameUnit={() => {}} onDeleteUnit={() => {}} existingTransactions={transactions} />}
         {activeTab === ActiveTab.MANAGEMENT && <TransactionTable transactions={transactions} onDelete={(id) => db.deleteTransaction(id).then(() => setTransactions(p => p.filter(t => t.id !== id)))} onDeleteMany={() => {}} onUpdate={handleUpdateTransaction} units={units} incomeCategories={categories.income} expenseCategories={categories.expense} />}
         {activeTab === ActiveTab.DASHBOARD && <Dashboard transactions={transactions} units={units} />}
         {activeTab === ActiveTab.USERS && isAdmin && <UserManagement availableUnits={units} />}

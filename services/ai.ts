@@ -69,7 +69,8 @@ class AIService {
     `;
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      // Fix: Use process.env.API_KEY directly as required by guidelines
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: this.MODEL_NAME,
         contents: prompt,
@@ -131,7 +132,8 @@ class AIService {
     `;
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      // Fix: Use process.env.API_KEY directly as required by guidelines
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: this.MODEL_NAME,
         contents: prompt,

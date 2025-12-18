@@ -285,7 +285,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       )}
 
        {isCategoryManageOpen && (
-        <ManageItemsModal title={`Categorias`} items={currentCategories} onClose={() => setIsCategoryManageOpen(false)} onRename={(old, n) => onRenameCategory(type, old, n)} onDelete={(n) => onDeleteCategory(type, n)} />
+        <ManageItemsModal 
+          title={`Categorias`} 
+          items={currentCategories} 
+          onClose={() => setIsCategoryManageOpen(false)} 
+          onRename={(old, n) => onRenameCategory(type, old, n)} 
+          onDelete={(n) => onDeleteCategory(type, n)} 
+        />
       )}
     </div>
   );
@@ -301,13 +307,53 @@ const SimpleInputModal: React.FC<SimpleInputModalProps> = ({ title, value, onCha
   </div>
 );
 
-interface ManageItemsModalProps { title: string; items: string[]; onClose: () => void; onRename: (oldName: string, newName: string) => void; onDelete: (name: string) => void; }
+interface ManageItemsModalProps { 
+  title: string; 
+  items: string[]; 
+  onClose: () => void; 
+  onRename: (oldName: string, newName: string) => void; 
+  onDelete: (name: string) => void; 
+}
 const ManageItemsModal: React.FC<ManageItemsModalProps> = ({ title, items, onClose, onRename, onDelete }) => {
+  const handleEditClick = (item: string) => {
+    const newName = window.prompt(`Renomear "${item}" para:`, item);
+    if (newName && newName.trim() && newName.trim() !== item) {
+      onRename(item, newName.trim());
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
       <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 w-full max-w-md shadow-2xl max-h-[80vh] flex flex-col">
-         <div className="flex justify-between items-center mb-4"><h3 className="text-lg font-bold text-white">{title}</h3><button onClick={onClose} className="text-gray-400"><X size={20} /></button></div>
-         <div className="overflow-y-auto space-y-2">{items.map(item => (<div key={item} className="bg-gray-900 p-3 rounded-lg flex justify-between items-center"><span className="text-gray-200">{item}</span><button onClick={() => onDelete(item)} className="text-red-400 p-1"><Trash2 size={16} /></button></div>))}</div>
+         <div className="flex justify-between items-center mb-4"><h3 className="text-lg font-bold text-white">{title}</h3><button onClick={onClose} className="text-gray-400 hover:text-white transition-colors"><X size={20} /></button></div>
+         <div className="overflow-y-auto space-y-2 custom-scrollbar">
+           {items.map(item => (
+             <div key={item} className="bg-gray-900 p-3 rounded-lg flex justify-between items-center border border-gray-700/50 hover:border-gray-600 transition-colors">
+               <span className="text-gray-200 font-medium">{item}</span>
+               <div className="flex gap-1">
+                 {item !== 'Outros' && (
+                   <>
+                    <button 
+                      onClick={() => handleEditClick(item)} 
+                      className="text-gray-400 hover:text-blue-400 p-2 rounded-md hover:bg-gray-800 transition-colors"
+                      title="Renomear"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button 
+                      onClick={() => onDelete(item)} 
+                      className="text-gray-400 hover:text-red-400 p-2 rounded-md hover:bg-gray-800 transition-colors"
+                      title="Excluir"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                   </>
+                 )}
+                 {item === 'Outros' && <span className="text-[9px] text-gray-600 font-bold uppercase py-2 px-1">Sistema</span>}
+               </div>
+             </div>
+           ))}
+         </div>
       </div>
     </div>
   );
