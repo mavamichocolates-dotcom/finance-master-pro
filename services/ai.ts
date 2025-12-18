@@ -7,13 +7,14 @@ export interface SuggestionResult {
   alternatives: string[];
 }
 
-export interface RouteOptimization {
-  summary: string;
-  groups: {
-    label: string;
-    orders: string[];
-    mapLink: string;
-  }[];
+export interface GroundingSource {
+  title: string;
+  uri: string;
+}
+
+export interface RouteAnalysisResponse {
+  text: string;
+  sources: GroundingSource[];
 }
 
 class AIService {
@@ -62,7 +63,6 @@ class AIService {
     return JSON.parse(response.text || "{}");
   }
 
-  // Fix: Added classifyBulk method to AIService to handle batch categorization requests from BankImportModal.tsx
   async classifyBulk(items: { description: string }[], categories: string[]): Promise<{ description: string, category: string }[]> {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const descriptions = items.map(i => i.description);
@@ -99,37 +99,60 @@ Descrições para classificar: ${JSON.stringify(descriptions)}`;
     }
   }
 
-  async optimizeDeliveryRoutes(orders: any[], userLocation?: { lat: number, lng: number }): Promise<string> {
+  async optimizeDeliveryRoutes(orders: any[], userLocation?: { lat: number, lng: number }): Promise<RouteAnalysisResponse> {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
-    const ordersList = orders.map(o => `- Pedido: ${o.pdvData.productName}, Endereço: ${o.pdvData.deliveryAddress || o.pdvData.region}`).join('\n');
+    const ordersList = orders.map(o => {
+      const addr = o.pdvData.deliveryAddress || o.pdvData.region;
+      return `- Pedido: ${o.pdvData.productName}, Cliente: ${o.pdvData.contact || 'S/N'}, Endereço: ${addr}`;
+    }).join('\n');
     
     const prompt = `
       Sou uma doceria (Mirella Doces). Tenho os seguintes pedidos para entrega hoje:
       ${ordersList}
 
-      Por favor, analise esses endereços usando o Google Maps. 
-      1. Agrupe os pedidos que estão próximos ou na mesma rota.
-      2. Sugira uma ordem lógica de entrega para cada grupo.
-      3. Forneça links do Google Maps (Google Maps URLs) para cada rota sugerida.
-      
-      Seja conciso e use Markdown para formatar a resposta.
+      Por favor, analise esses endereços usando o Google Maps:
+      1. Identifique quais pedidos estão próximos entre si.
+      2. Crie "grupos de entrega" (rotas) otimizadas.
+      3. Sugira uma ordem de paradas.
+      4. Mencione os bairros principais identificados.
+
+      Importante: Forneça links do Google Maps que agrupem esses endereços se possível.
+      Responda em Português do Brasil com tom profissional.
     `;
 
     const response = await ai.models.generateContent({
       model: this.MODEL_MAPS,
       contents: prompt,
       config: {
-        tools: [{ googleMaps: {} }],
+        tools: [{ googleMaps: {} }] as any,
         toolConfig: {
           retrievalConfig: {
             latLng: userLocation ? { latitude: userLocation.lat, longitude: userLocation.lng } : undefined
           }
-        }
+        } as any
       }
     });
 
-    return response.text || "Não foi possível gerar as rotas no momento.";
+    // Extrair fontes de grounding obrigatórias
+    const sources: GroundingSource[] = [];
+    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+    
+    if (chunks) {
+      chunks.forEach((chunk: any) => {
+        if (chunk.maps) {
+          sources.push({
+            title: chunk.maps.title || "Localização no Maps",
+            uri: chunk.maps.uri
+          });
+        }
+      });
+    }
+
+    return {
+      text: response.text || "Análise concluída.",
+      sources: sources
+    };
   }
 }
 
