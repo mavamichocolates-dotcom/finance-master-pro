@@ -36,17 +36,67 @@ const REGION_SUGGESTIONS = [
 ];
 
 const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => {
-  // Catálogo persistente em localStorage
+  // Catálogo persistente em localStorage com os dados fornecidos pelo usuário
   const [catalog, setCatalog] = useState<ProductInfo[]>(() => {
     const saved = localStorage.getItem('fm_pdv_catalog');
-    return saved ? JSON.parse(saved) : [
-      { code: 'a16', name: 'Buquê Conquista', price: 180, cost: 80 },
-      { code: 'a01', name: 'Mini Buquê Delicadeza', price: 110, cost: 45 },
-      { code: 'a20', name: 'Buquê Sonho de Amor', price: 250, cost: 110 },
-      { code: 'a02', name: 'Mini Ferrero com Rosa', price: 100, cost: 40 },
-      { code: 'a05', name: 'Mini Buquê Encanto', price: 90, cost: 35 },
-      { code: 'a13', name: 'Buquê Te Adoro', price: 190, cost: 85 },
-      { code: 'a08', name: 'Buquê Amante de Chocolate', price: 160, cost: 70 },
+    if (saved) return JSON.parse(saved);
+
+    // Lista oficial de produtos Mirella Doces
+    return [
+      { code: 'A01', name: 'Mini Buquê Delicadeza', price: 110.00, cost: 28.31 },
+      { code: 'A02', name: 'Mini Ferrero com Rosa', price: 100.00, cost: 32.30 },
+      { code: 'A03', name: 'Mini Buquê Carinho', price: 115.00, cost: 29.91 },
+      { code: 'A04', name: 'Mini Buquê Namorar', price: 130.00, cost: 32.42 },
+      { code: 'A05', name: 'Mini Buquê Encanto', price: 90.00, cost: 22.05 },
+      { code: 'A06', name: 'Mini Buquê Alegria', price: 110.00, cost: 28.31 },
+      { code: 'A08', name: 'Buque Amante de Chocolate', price: 160.00, cost: 46.90 },
+      { code: 'A09', name: 'Buquê Emoção', price: 210.00, cost: 67.45 },
+      { code: 'A10', name: 'Buquê União', price: 180.00, cost: 54.71 },
+      { code: 'A11', name: 'Buquê Branco', price: 190.00, cost: 57.81 },
+      { code: 'A12', name: 'Buque Charme', price: 209.00, cost: 68.84 },
+      { code: 'A13', name: 'Buquê Te Adoro', price: 190.00, cost: 61.12 },
+      { code: 'A14', name: 'Buquê Callebaut', price: 185.00, cost: 61.98 },
+      { code: 'A15', name: 'Buquê Rosa', price: 180.00, cost: 51.10 },
+      { code: 'A16', name: 'Buque Conquista', price: 180.00, cost: 55.23 },
+      { code: 'A17', name: 'Buque Branco', price: 185.00, cost: 57.81 },
+      { code: 'A19', name: 'Buque Amor Infinito', price: 250.00, cost: 69.91 },
+      { code: 'A20', name: 'Buquê Sonho de Amor', price: 250.00, cost: 84.91 },
+      { code: 'A21', name: 'Buquê Fidelidade', price: 390.00, cost: 119.16 },
+      { code: 'A22', name: 'Buquê Prosperidade', price: 290.00, cost: 104.91 },
+      { code: 'A23', name: 'Buquê Felicidade', price: 350.00, cost: 102.09 },
+      { code: 'A26', name: 'Buquê Ternura', price: 195.00, cost: 69.80 },
+      { code: 'A27', name: 'Buquê Love', price: 259.70, cost: 101.75 },
+      { code: 'A28', name: 'Buquê Coração G 23F 12R', price: 380.00, cost: 126.74 },
+      { code: 'A29', name: 'Buquê Fascínio', price: 180.00, cost: 64.80 },
+      { code: 'A30', name: 'Buquê Ouro Branco', price: 170.00, cost: 29.00 },
+      { code: 'A31', name: 'Buquê Sonho de Valsa', price: 170.00, cost: 29.00 },
+      { code: 'A32', name: 'Buquê Mega Ferrero Rocher', price: 290.00, cost: 128.05 },
+      { code: 'A33', name: 'Kit Mini Buque e Rosa', price: 110.00, cost: 29.88 },
+      { code: 'A34', name: 'Mini Buque Coração 14F-5R', price: 190.00, cost: 58.66 },
+      { code: 'A35', name: 'Mini Buque Coração P-12F 3R', price: 170.00, cost: 55.00 },
+      { code: 'A36', name: 'Buquê Amor', price: 660.00, cost: 277.99 },
+      { code: 'A37', name: 'Buquê Apaixonado', price: 380.00, cost: 136.95 },
+      { code: 'A38', name: 'Buquê Realeza', price: 660.00, cost: 134.29 },
+      { code: 'A39', name: 'Buquê Harmonia', price: 590.00, cost: 113.85 },
+      { code: 'A40', name: 'Mini Buque Coração 12F-3R', price: 170.00, cost: 45.00 },
+      { code: 'A43', name: 'Buquê Colombiano 6 Rosas', price: 125.00, cost: 28.94 },
+      { code: 'A44', name: 'Buquê Colombiano 12 Rosas', price: 219.00, cost: 56.79 },
+      { code: 'A45', name: 'Buque Callebaut com balão', price: 198.00, cost: 64.00 },
+      { code: 'A49', name: 'Caixa de Ferrero com Rosa', price: 90.00, cost: 20.72 },
+      { code: 'A50', name: 'Caixa de Morango com Rosa', price: 85.00, cost: 15.93 },
+      { code: 'A52', name: 'Buque Sonho de Mulher', price: 1000.00, cost: 217.88 },
+      { code: 'A53', name: 'Buque Sunflowers', price: 1399.00, cost: 374.34 },
+      { code: 'A57', name: 'Buque Pistache', price: 185.00, cost: 45.00 },
+      { code: 'A58', name: 'Mini Buque Branco', price: 90.00, cost: 11.57 },
+      { code: 'A59', name: 'Mini Buque Amor', price: 95.00, cost: 16.00 },
+      { code: 'A60', name: 'Saco de Pétalas', price: 30.00, cost: 6.00 },
+      { code: 'A62', name: 'Mini Buque Doce Encanto', price: 130.00, cost: 20.00 },
+      { code: 'A63', name: 'Buque Surpresa de Amor', price: 210.00, cost: 56.00 },
+      { code: 'A64', name: 'Mini Buque Mesclado Raf/Fer', price: 84.90, cost: 16.00 },
+      { code: 'A65', name: 'Buque Segredo de Cacau', price: 170.00, cost: 32.00 },
+      { code: 'A68', name: '6 Morangos 6 Rosas', price: 132.00, cost: 34.94 },
+      { code: 'A69', name: 'Ferrero Love', price: 79.00, cost: 22.18 },
+      { code: 'A70', name: 'Buquês Mentoria', price: 75.00, cost: 10.00 },
     ];
   });
 
@@ -121,7 +171,7 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
       pdvData: {
         deliveryDate,
         contact,
-        region: region.trim() || 'Loja / Balcão', // Garantia de região preenchida
+        region: region.trim() || 'Loja / Balcão',
         productCode,
         productName,
         paymentMethod,
@@ -317,7 +367,6 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
               <div className="divide-y divide-gray-700/30">
                 {pdvTransactions.map(t => {
                   const lucro = t.amount - (t.pdvData?.productCost || 0);
-                  const margem = t.amount > 0 ? (lucro / t.amount) * 100 : 0;
                   return (
                     <div key={t.id} className="p-5 hover:bg-gray-700/20 transition-all flex justify-between items-center group">
                       <div className="flex gap-4 min-w-0">
