@@ -1,5 +1,7 @@
 {
   "name": "FinanceMaster Pro",
   "description": "A complete financial control dashboard featuring income/expense tracking, cash flow analysis, DRE integration, and installment management with a modern spreadsheet interface.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "geolocation"
+  ]
 }

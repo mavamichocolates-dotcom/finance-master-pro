@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
 import { db } from '../services/db';
@@ -362,7 +363,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ availableUnits }) => {
                     onChange={e => setEditingUser({...editingUser, role: e.target.value as UserRole})}
                     className="w-full bg-gray-900 border border-gray-600 rounded-lg p-2.5 text-white focus:border-blue-500 outline-none cursor-pointer"
                   >
-                    <option value="COLLABORATOR">Colaborador (Apenas Registra)</option>
+                    <option value="COLLABORATOR">Colaborador (Acesso apenas ao PDV)</option>
                     <option value="MANAGER">Gestor (Visualiza Relatórios)</option>
                     <option value="ADMIN">Administrador (Acesso Total)</option>
                   </select>

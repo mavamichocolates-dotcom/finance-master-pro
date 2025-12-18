@@ -1,5 +1,4 @@
 
-// Fix: Strictly follow @google/genai guidelines for API key and model usage
 import { GoogleGenAI, Type } from "@google/genai";
 
 export interface SuggestionResult {
@@ -8,25 +7,28 @@ export interface SuggestionResult {
   alternatives: string[];
 }
 
+export interface RouteOptimization {
+  summary: string;
+  groups: {
+    label: string;
+    orders: string[];
+    mapLink: string;
+  }[];
+}
+
 class AIService {
   private HISTORY_KEY = 'fm_learned_patterns';
-  private MODEL_NAME = 'gemini-3-flash-preview';
+  private MODEL_TEXT = 'gemini-3-flash-preview';
+  private MODEL_MAPS = 'gemini-2.5-flash';
 
   private normalizeDescription(desc: string): string {
-    return desc
-      .toLowerCase()
-      .replace(/[0-9]/g, '')
-      .replace(/[^\w\s]/gi, '')
-      .replace(/\s+/g, ' ')
-      .trim();
+    return desc.toLowerCase().replace(/[0-9]/g, '').replace(/[^\w\s]/gi, '').replace(/\s+/g, ' ').trim();
   }
 
   public learn(description: string, category: string) {
     if (!description || !category || category === 'Outros') return;
-    
     const history = this.getHistory();
     const pattern = this.normalizeDescription(description);
-    
     if (pattern.length > 2) {
       history[pattern] = category;
       localStorage.setItem(this.HISTORY_KEY, JSON.stringify(history));
@@ -38,131 +40,96 @@ class AIService {
     return saved ? JSON.parse(saved) : {};
   }
 
-  private getLearnedCategory(description: string): string | null {
-    const history = this.getHistory();
-    const pattern = this.normalizeDescription(description);
-    return history[pattern] || null;
+  async suggestCategory(description: string, type: 'INCOME' | 'EXPENSE', categories: string[]): Promise<SuggestionResult> {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const response = await ai.models.generateContent({
+      model: this.MODEL_TEXT,
+      contents: `Classifique: "${description}" (${type}). Categorias: ${JSON.stringify(categories)}`,
+      config: { 
+        temperature: 0.1,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            category: { type: Type.STRING },
+            confidence: { type: Type.NUMBER },
+            alternatives: { type: Type.ARRAY, items: { type: Type.STRING } }
+          },
+          required: ["category", "confidence", "alternatives"]
+        }
+      }
+    });
+    return JSON.parse(response.text || "{}");
   }
 
-  async suggestCategory(description: string, type: 'INCOME' | 'EXPENSE', categories: string[]): Promise<SuggestionResult> {
-    // 1. Verificação de aprendizado local (Confiança 100%)
-    const learned = this.getLearnedCategory(description);
-    if (learned && categories.includes(learned)) {
-      return {
-        category: learned,
-        confidence: 1.0,
-        alternatives: []
-      };
-    }
+  // Fix: Added classifyBulk method to AIService to handle batch categorization requests from BankImportModal.tsx
+  async classifyBulk(items: { description: string }[], categories: string[]): Promise<{ description: string, category: string }[]> {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const descriptions = items.map(i => i.description);
+    const prompt = `Classifique as seguintes descrições de transações bancárias nas categorias fornecidas. 
+Categorias permitidas: ${JSON.stringify(categories)}
+Descrições para classificar: ${JSON.stringify(descriptions)}`;
 
-    // 2. IA para novos padrões
-    const prompt = `
-      Classifique o lançamento financeiro abaixo.
-      Descrição: "${description}"
-      Tipo: ${type === 'INCOME' ? 'Receita/Venda' : 'Despesa/Custo'}
-      Categorias Disponíveis: ${JSON.stringify(categories)}
-
-      Instruções:
-      - Escolha a categoria mais provável.
-      - Defina um nível de confiança de 0.0 a 1.0.
-      - Liste até 2 alternativas caso haja ambiguidade.
-    `;
-
-    try {
-      // Fix: Use process.env.API_KEY directly as required by guidelines
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: this.MODEL_NAME,
-        contents: prompt,
-        config: { 
-          temperature: 0.2,
-          responseMimeType: "application/json",
-          responseSchema: {
+    const response = await ai.models.generateContent({
+      model: this.MODEL_TEXT,
+      contents: prompt,
+      config: {
+        temperature: 0.1,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
             type: Type.OBJECT,
             properties: {
-              category: { type: Type.STRING },
-              confidence: { type: Type.NUMBER },
-              alternatives: { 
-                type: Type.ARRAY,
-                items: { type: Type.STRING }
-              }
+              description: { type: Type.STRING },
+              category: { type: Type.STRING }
             },
-            required: ["category", "confidence", "alternatives"]
+            required: ["description", "category"]
           }
         }
-      });
-      
-      const result = JSON.parse(response.text || "{}");
-      
-      // Validação básica para garantir que a categoria existe na lista do usuário
-      const validCategory = categories.find(c => c.toLowerCase() === result.category?.toLowerCase()) || "Outros";
-      const validAlternatives = (result.alternatives || [])
-        .map((alt: string) => categories.find(c => c.toLowerCase() === alt.toLowerCase()))
-        .filter((alt: string | undefined): alt is string => !!alt && alt !== validCategory);
+      }
+    });
 
-      return {
-        category: validCategory,
-        confidence: result.confidence || 0.5,
-        alternatives: validAlternatives
-      };
-    } catch (error) {
-      console.error("[IA Error]", error);
-      return { category: "Outros", confidence: 0, alternatives: [] };
+    try {
+      const text = response.text || "[]";
+      return JSON.parse(text);
+    } catch (e) {
+      console.error("Erro ao processar resposta em lote da IA:", e);
+      return [];
     }
   }
 
-  async classifyBulk(items: { description: string, type: string }[], allCategories: string[]) {
-    const history = this.getHistory();
-    const results = items.map(item => {
-      const pattern = this.normalizeDescription(item.description);
-      const learned = history[pattern];
-      return {
-        description: item.description,
-        category: (learned && allCategories.includes(learned)) ? learned : null
-      };
-    });
-
-    const pending = results.filter(r => !r.category);
-    if (pending.length === 0) return results;
-
+  async optimizeDeliveryRoutes(orders: any[], userLocation?: { lat: number, lng: number }): Promise<string> {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    const ordersList = orders.map(o => `- Pedido: ${o.pdvData.productName}, Endereço: ${o.pdvData.deliveryAddress || o.pdvData.region}`).join('\n');
+    
     const prompt = `
-      Classifique os lançamentos abaixo.
-      Categorias Permitidas: ${JSON.stringify(allCategories)}
-      Lançamentos: ${JSON.stringify(pending.map(p => p.description))}
+      Sou uma doceria (Mirella Doces). Tenho os seguintes pedidos para entrega hoje:
+      ${ordersList}
+
+      Por favor, analise esses endereços usando o Google Maps. 
+      1. Agrupe os pedidos que estão próximos ou na mesma rota.
+      2. Sugira uma ordem lógica de entrega para cada grupo.
+      3. Forneça links do Google Maps (Google Maps URLs) para cada rota sugerida.
+      
+      Seja conciso e use Markdown para formatar a resposta.
     `;
 
-    try {
-      // Fix: Use process.env.API_KEY directly as required by guidelines
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: this.MODEL_NAME,
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                description: { type: Type.STRING },
-                category: { type: Type.STRING },
-              },
-              required: ["description", "category"]
-            }
+    const response = await ai.models.generateContent({
+      model: this.MODEL_MAPS,
+      contents: prompt,
+      config: {
+        tools: [{ googleMaps: {} }],
+        toolConfig: {
+          retrievalConfig: {
+            latLng: userLocation ? { latitude: userLocation.lat, longitude: userLocation.lng } : undefined
           }
         }
-      });
-      
-      const aiResults = JSON.parse(response.text || "[]");
-      return results.map(r => {
-        if (r.category) return r;
-        const aiMatch = aiResults.find((ar: any) => ar.description === r.description);
-        return { ...r, category: aiMatch?.category || "Outros" };
-      });
-    } catch (error) {
-      console.error("[IA Bulk Error]", error);
-      return results.map(r => ({ ...r, category: r.category || "Outros" }));
-    }
+      }
+    });
+
+    return response.text || "Não foi possível gerar as rotas no momento.";
   }
 }
 

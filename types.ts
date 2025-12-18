@@ -26,37 +26,21 @@ export interface Transaction {
   userId?: string;
   createdAt?: string;
   
-  // Campos específicos para o PDV (Baseados no print da planilha)
   pdvData?: {
     deliveryDate?: string;
     contact?: string;
-    region?: string; // Alterado de cepCode para region
+    region?: string;
+    deliveryAddress?: string; // Novo campo para busca no Maps
     productCode?: string;
     productName?: string;
     paymentMethod?: string;
     baseValue?: number;
-    productCost?: number; // Custo do produto para cálculo de lucro
+    productCost?: number;
     additional?: number;
     frete?: number;
     discount?: number;
   };
 }
-
-export interface CategoryStats {
-  category: string;
-  total: number;
-  percentage: number;
-  type: TransactionType;
-}
-
-export interface MonthlySummary {
-  month: string;
-  income: number;
-  expense: number;
-  balance: number;
-}
-
-export type UserRole = 'ADMIN' | 'MANAGER' | 'COLLABORATOR';
 
 export interface User {
   id: string;
@@ -68,3 +52,5 @@ export interface User {
   createdAt: string;
   active: boolean;
 }
+
+export type UserRole = 'ADMIN' | 'MANAGER' | 'COLLABORATOR';

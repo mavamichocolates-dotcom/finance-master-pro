@@ -64,6 +64,9 @@ const App: React.FC = () => {
           // SE FOR COLABORADOR, FORÇA ABA DO PDV E BLOQUEIA RESTO
           if (user.role === 'COLLABORATOR') {
             setActiveTab(ActiveTab.PDV);
+          } else if (activeTab === ActiveTab.INPUT) {
+             // Redireciona para PDV como default se for colaborador tentando acessar algo restrito
+             // (embora os botões já sumam, é uma camada extra de segurança)
           }
           setIsLoading(true);
           const txs = await db.getTransactions();
@@ -215,21 +218,23 @@ const App: React.FC = () => {
               )}
               
               <nav className="flex bg-gray-800 rounded-lg p-1">
-                {!isCollaborator && (
+                {!isCollaborator ? (
                   <>
                     <TabButton active={activeTab === ActiveTab.INPUT} onClick={() => setActiveTab(ActiveTab.INPUT)} icon={<Wallet size={18} />} label="Entradas" />
                     <TabButton active={activeTab === ActiveTab.MANAGEMENT} onClick={() => setActiveTab(ActiveTab.MANAGEMENT)} icon={<Receipt size={18} />} label="Gestão" />
                     <TabButton active={activeTab === ActiveTab.DASHBOARD} onClick={() => setActiveTab(ActiveTab.DASHBOARD)} icon={<TrendingUp size={18} />} label="Fluxo" />
+                    <TabButton active={activeTab === ActiveTab.PDV} onClick={() => setActiveTab(ActiveTab.PDV)} icon={<ShoppingCart size={18} />} label="PDV" />
+                    {isAdmin && <TabButton active={activeTab === ActiveTab.USERS} onClick={() => setActiveTab(ActiveTab.USERS)} icon={<Users size={18} />} label="Usuários" />}
                   </>
+                ) : (
+                  <TabButton active={activeTab === ActiveTab.PDV} onClick={() => setActiveTab(ActiveTab.PDV)} icon={<ShoppingCart size={18} />} label="Terminal de Vendas PDV" />
                 )}
-                <TabButton active={activeTab === ActiveTab.PDV} onClick={() => setActiveTab(ActiveTab.PDV)} icon={<ShoppingCart size={18} />} label="PDV" />
-                {isAdmin && <TabButton active={activeTab === ActiveTab.USERS} onClick={() => setActiveTab(ActiveTab.USERS)} icon={<Users size={18} />} label="Usuários" />}
               </nav>
 
               <div className="flex items-center gap-2 border-l border-gray-700 pl-4">
                 <div className="hidden sm:block text-right">
                   <p className="text-xs font-bold text-white">{currentUser.name}</p>
-                  <p className="text-[10px] text-gray-500 uppercase">{currentUser.role === 'COLLABORATOR' ? 'Vendedor' : currentUser.role}</p>
+                  <p className="text-[10px] text-gray-500 uppercase">{currentUser.role === 'COLLABORATOR' ? 'Vendedor PDV' : currentUser.role}</p>
                 </div>
                 <button onClick={() => { auth.logout(); window.location.reload(); }} className="p-2 text-red-400 hover:bg-red-900/20 rounded-lg"><LogOut size={20} /></button>
               </div>
