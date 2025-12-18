@@ -30,7 +30,7 @@ export interface Transaction {
   pdvData?: {
     deliveryDate?: string;
     contact?: string;
-    cepCode?: string;
+    region?: string; // Alterado de cepCode para region
     productCode?: string;
     productName?: string;
     paymentMethod?: string;

@@ -21,6 +21,19 @@ interface ProductInfo {
   cost: number;
 }
 
+const REGIONS = [
+  'Zona Leste',
+  'Zona Oeste',
+  'Zona Norte',
+  'Zona Sul',
+  'Centro',
+  'ABC Paulista',
+  'Guarulhos',
+  'Osasco / Barueri',
+  'Interior',
+  'Outros'
+];
+
 const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => {
   // Catálogo persistente em localStorage
   const [catalog, setCatalog] = useState<ProductInfo[]>(() => {
@@ -44,7 +57,7 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
   const [date, setDate] = useState(getTodayString());
   const [deliveryDate, setDeliveryDate] = useState(getTodayString());
   const [contact, setContact] = useState('');
-  const [cepCode, setCepCode] = useState('');
+  const [region, setRegion] = useState(''); // Alterado de cepCode para region
   const [productCode, setProductCode] = useState('');
   const [productName, setProductName] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
@@ -107,7 +120,7 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
       pdvData: {
         deliveryDate,
         contact,
-        cepCode,
+        region, // Alterado de cepCode para region
         productCode,
         productName,
         paymentMethod,
@@ -125,7 +138,7 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 2500);
     setContact('');
-    setCepCode('');
+    setRegion(''); // Reset region
     setProductCode('');
     setProductName('');
     setBaseValue('');
@@ -234,8 +247,17 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
               <InputGroup label="Nome do Produto" icon={<Package size={14} />} className="md:col-span-6">
                 <input type="text" required value={productName} onChange={e => setProductName(e.target.value)} className="custom-pdv-input font-bold" placeholder="Digite o nome ou use o código..." />
               </InputGroup>
-              <InputGroup label="CEP / Local" icon={<MapPin size={14} />} className="md:col-span-3">
-                <input type="text" value={cepCode} onChange={e => setCepCode(e.target.value)} className="custom-pdv-input" placeholder="Ex: Zona Norte" />
+              <InputGroup label="Região / Zona" icon={<MapPin size={14} />} className="md:col-span-3">
+                <select 
+                  value={region} 
+                  onChange={e => setRegion(e.target.value)} 
+                  className="custom-pdv-input font-bold"
+                >
+                  <option value="">Selecione...</option>
+                  {REGIONS.map(reg => (
+                    <option key={reg} value={reg}>{reg}</option>
+                  ))}
+                </select>
               </InputGroup>
             </div>
 
@@ -303,7 +325,7 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
                           <p className="font-black text-white text-sm truncate uppercase tracking-tight mb-1">{t.pdvData?.productName || t.description}</p>
                           <div className="flex items-center gap-3 text-[10px] text-gray-500 font-bold uppercase tracking-tight">
                             <span className="bg-indigo-600/10 px-2 py-0.5 rounded text-indigo-400 border border-indigo-500/20">{t.pdvData?.productCode || '---'}</span>
-                            <span className="flex items-center gap-1"><CreditCard size={10} /> {t.pdvData?.paymentMethod || '-'}</span>
+                            <span className="flex items-center gap-1"><MapPin size={10} /> {t.pdvData?.region || '-'}</span>
                           </div>
                         </div>
                       </div>
