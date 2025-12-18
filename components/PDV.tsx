@@ -76,15 +76,22 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
     return v + a + f - d;
   }, [baseValue, additional, frete, discount]);
 
-  // Filtro inteligente para transações do PDV (usa metadados ou prefixo de descrição)
+  // Filtro inteligente para transações do PDV
+  // Agora inclui qualquer INCOME (Entrada) para garantir que nada seja perdido
   const pdvTransactions = useMemo(() => {
-    return existingTransactions.filter(t => t.pdvData || t.description.startsWith('PDV:'));
+    return existingTransactions.filter(t => 
+      t.type === TransactionType.INCOME || 
+      t.pdvData || 
+      t.description.startsWith('PDV:')
+    );
   }, [existingTransactions]);
 
   const dailyReport = useMemo(() => {
-    const dayTxs = pdvTransactions.filter(t => t.date === date);
+    // Filtra transações que batem com a data selecionada no PDV
+    const dayTxs = pdvTransactions.filter(t => t.date.substring(0, 10) === date.substring(0, 10));
+    
     const gross = dayTxs.reduce((s, t) => s + (Number(t.amount) || 0), 0);
-    const cost = dayTxs.reduce((s, t) => s + (t.pdvData?.productCost || 0), 0);
+    const cost = dayTxs.reduce((s, t) => s + (Number(t.pdvData?.productCost) || 0), 0);
     
     return { 
         gross, cost, net: gross - cost, 
@@ -99,12 +106,16 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
   const recentOrders = useMemo(() => {
     return [...pdvTransactions]
       .sort((a, b) => {
+        // Primeiro ordena por data decrescente
         const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
         if (dateDiff !== 0) return dateDiff;
-        // Se a data for igual, ordena pelo tempo de criação ou ID
-        return (b.createdAt || b.id).localeCompare(a.createdAt || a.id);
+        
+        // Se a data for igual, usa o tempo de criação (ISO string) para garantir que o mais novo esteja no topo
+        const timeA = a.createdAt || '';
+        const timeB = b.createdAt || '';
+        return timeB.localeCompare(timeA);
       })
-      .slice(0, 30);
+      .slice(0, 50); // Aumentado para 50 para melhor histórico
   }, [pdvTransactions]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -136,7 +147,7 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 2500);
     
-    // Limpar campos exceto as datas de hoje para agilizar próximos lançamentos
+    // Limpar campos de entrada
     setContact(''); 
     setRegion(''); 
     setDeliveryAddress(''); 
@@ -282,7 +293,7 @@ const PDV: React.FC<PDVProps> = ({ onAddTransaction, existingTransactions }) => 
             </div>
             <div className="flex-grow overflow-y-auto custom-scrollbar">
                 {recentOrders.length === 0 ? (
-                  <div className="p-10 text-center text-gray-500 italic text-sm">Nenhum pedido registrado hoje.</div>
+                  <div className="p-10 text-center text-gray-500 italic text-sm">Nenhum pedido registrado.</div>
                 ) : (
                   recentOrders.map(t => (
                     <div key={t.id} className="p-4 border-b border-gray-700/30 flex justify-between items-center group hover:bg-gray-700/20 transition-colors">
