@@ -102,22 +102,24 @@ Descrições para classificar: ${JSON.stringify(descriptions)}`;
   async optimizeDeliveryRoutes(orders: any[], userLocation?: { lat: number, lng: number }): Promise<RouteAnalysisResponse> {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
+    // Preparar lista de pedidos para o prompt
     const ordersList = orders.map(o => {
       const addr = o.pdvData.deliveryAddress || o.pdvData.region;
-      return `- Item: ${o.pdvData.productName}, Para: ${o.pdvData.contact || 'Cliente'}, Local: ${addr}`;
+      return `- Pedido #${o.id.substring(0,4)}: ${o.pdvData.productName}, Para: ${o.pdvData.contact || 'Cliente'}, Local: ${addr}`;
     }).join('\n');
     
     const prompt = `
-      Sou a Mirella Doces e preciso realizar as seguintes entregas hoje:
+      Você é um especialista em logística. Preciso otimizar as entregas de hoje para a Mirella Doces.
+      Pedidos agendados:
       ${ordersList}
 
-      Como um especialista em logística urbana, use o Google Maps para:
-      1. Agrupar os pedidos por proximidade geográfica (Bairros/Regiões).
-      2. Sugerir a sequência mais eficiente de entregas começando da nossa sede (considere o trânsito e distâncias).
-      3. Para cada grupo, forneça uma breve justificativa da rota.
-      4. Crucial: Tente gerar links consolidados do Google Maps para cada rota sugerida.
+      Tarefas:
+      1. Identifique as coordenadas e regiões de cada endereço usando o Google Maps.
+      2. Agrupe pedidos que estão na mesma direção ou bairro.
+      3. Sugira uma ordem de entrega (rota) eficiente para economizar tempo.
+      4. Justifique brevemente por que essa ordem é a melhor.
 
-      Responda de forma clara, em Português do Brasil, usando Markdown para destacar os grupos.
+      Importante: Forneça a análise em Português e, se possível, gere links consolidados do Google Maps.
     `;
 
     const response = await ai.models.generateContent({
@@ -140,7 +142,7 @@ Descrições para classificar: ${JSON.stringify(descriptions)}`;
       chunks.forEach((chunk: any) => {
         if (chunk.maps) {
           sources.push({
-            title: chunk.maps.title || "Ver no Google Maps",
+            title: chunk.maps.title || "Abrir no Google Maps",
             uri: chunk.maps.uri
           });
         }
@@ -148,7 +150,7 @@ Descrições para classificar: ${JSON.stringify(descriptions)}`;
     }
 
     return {
-      text: response.text || "Não foi possível gerar a análise no momento.",
+      text: response.text || "Não foi possível gerar a análise logística no momento.",
       sources: sources
     };
   }
