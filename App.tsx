@@ -101,12 +101,21 @@ const App: React.FC = () => {
     try {
       const savedResults: Transaction[] = [];
       for (const t of newTxs) {
+        // Garantimos que o userId seja incluído antes de enviar pro DB
         const saved = await db.addTransaction({ ...t, userId: currentUser?.id });
         if (saved) {
           savedResults.push(saved);
         }
       }
-      setTransactions((prev) => [...prev, ...savedResults]);
+      
+      // Atualização atômica do estado para evitar bugs de visualização
+      if (savedResults.length > 0) {
+        setTransactions((prev) => {
+          const updated = [...prev, ...savedResults];
+          // Ordenamos por data descendente para manter consistência
+          return updated.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        });
+      }
     } catch (error: any) {
       console.error("Erro ao adicionar transação:", error);
       if (error.message?.includes('reviewed')) setIsDatabaseReady(false);
